@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "skills": {
+    "brainstorming": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/brainstorming/SKILL.md",
+      "computedHash": "b95dc657c5dd79caf7340ee6dead6faf2ce2d1cc613352a027fa8993966b41b7"
+    },
+    "code-review": {
+      "source": "getsentry/skills",
+      "sourceType": "github",
+      "skillPath": "skills/code-review/SKILL.md",
+      "computedHash": "f0604d278cfd4eac4dac29eb297a5c6b6ebfb9f020235e8aafbe2eff0e42a147"
+    },
+    "figma": {
+      "source": "openai/skills",
+      "sourceType": "github",
+      "skillPath": "skills/.curated/figma/SKILL.md",
+      "computedHash": "be357ea39dc912911c0da826a1638513e3544d7315dc5a206a0d7aec1bae9ed7"
+    },
+    "figma-implement-design": {
+      "source": "openai/skills",
+      "sourceType": "github",
+      "skillPath": "skills/.curated/figma-implement-design/SKILL.md",
+      "computedHash": "78b017706f6e3732a1f9e87968cdc8ce7f31b0a59741f7d0f7cf9a531fe47e7a"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "computedHash": "b146008599c31057cef1c145774cea5d5afb30e8f43fa802e47a4b461419aaaf"
+    },
+    "security-best-practices": {
+      "source": "openai/skills",
+      "sourceType": "github",
+      "skillPath": "skills/.curated/security-best-practices/SKILL.md",
+      "computedHash": "c27616fb4e27999605b90b261dc729784420c8d77bd1a98748384ffaa5b35704"
+    },
+    "swift-testing-pro": {
+      "source": "twostraws/swift-testing-agent-skill",
+      "sourceType": "github",
+      "skillPath": "swift-testing-pro/SKILL.md",
+      "computedHash": "576d9b4705c76262095e2470e99bb9a89324ac4467e7ee54b7032697a8789b3d"
+    },
+    "swiftdata-pro": {
+      "source": "twostraws/swiftdata-agent-skill",
+      "sourceType": "github",
+      "skillPath": "swiftdata-pro/SKILL.md",
+      "computedHash": "2f979bad98ea3a6744084c5f93e27897f02e8d0ffe15dd03042e88aaae4da14c"
+    },
+    "swiftui-pro": {
+      "source": "twostraws/swiftui-agent-skill",
+      "sourceType": "github",
+      "skillPath": "swiftui-pro/SKILL.md",
+      "computedHash": "e0edf9a937bbb8c86c170b130ff825f158cc286f07ec477b67835e9c1b20267e"
+    },
+    "systematic-debugging": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/systematic-debugging/SKILL.md",
+      "computedHash": "3589907ee34dc8b1b7223a33fac98ab841a9e42f9960ab4433a832f0c6f00be0"
+    },
+    "test-driven-development": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/test-driven-development/SKILL.md",
+      "computedHash": "3cfe4ebb6fa7288f668d87880d279c8e48f7a92b63415e296857060f5ce22e05"
+    },
+    "verification-before-completion": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/verification-before-completion/SKILL.md",
+      "computedHash": "b529822bdac4b197b180fe12225cff86b930b65910435103c10622df7f041651"
+    },
+    "writing-plans": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/writing-plans/SKILL.md",
+      "computedHash": "c2647b5bf067be353a893e5a39a632cbbeb7ad81e61fa5ae227ece5490029073"
+    }
+  }
+}
