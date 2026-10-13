@@ -8,17 +8,20 @@ import SwiftUI
 public struct GaugeProgressView: View {
     public var title: String
     public var value: String
+    public var secondaryValue: String?
     public var progress: Double // 0.0 to 1.0
     public var progressColor: Color
 
     public init(
         title: String,
         value: String,
+        secondaryValue: String? = nil,
         progress: Double,
         progressColor: Color = .tachoOrange
     ) {
         self.title = title
         self.value = value
+        self.secondaryValue = secondaryValue
         self.progress = progress
         self.progressColor = progressColor
     }
@@ -43,10 +46,21 @@ public struct GaugeProgressView: View {
                 }
 
                 // Center Value Text
-                Text(value)
-                    .font(.system(.title, weight: .bold))
-                    .foregroundColor(.tachoDark)
-                    .offset(y: 4)
+                VStack(spacing: 0) {
+                    Text(value)
+                        .font(.system(.title, weight: .bold))
+                        .foregroundColor(.tachoDark)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                    if let secondaryValue {
+                        Text(secondaryValue)
+                            .font(.system(.footnote, weight: .medium).monospacedDigit())
+                            .foregroundColor(.tachoSecondary)
+                            .accessibilityIdentifier("shiftSecondsLabel")
+                    }
+                }
+                .padding(.horizontal, 24)
+                .offset(y: 4)
             }
             .aspectRatio(136 / 114, contentMode: .fit)
             .frame(maxWidth: 136)

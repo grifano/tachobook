@@ -167,12 +167,7 @@ public struct DashboardView: View {
                 .foregroundColor(.tachoDark)
 
             HStack(spacing: 32) {
-                GaugeProgressView(
-                    title: "Working Time",
-                    value: model.workingTimeString,
-                    progress: model.workingFraction,
-                    progressColor: Color.tachoOrange
-                )
+                workingTimeGauge
 
                 GaugeProgressView(
                     title: "Rest Time",
@@ -190,6 +185,30 @@ public struct DashboardView: View {
             RoundedRectangle(cornerRadius: TachoTheme.cardRadius)
                 .stroke(Color.tachoCardBorder, lineWidth: 2)
         )
+    }
+
+    @ViewBuilder
+    private var workingTimeGauge: some View {
+        if model.isShiftOpen {
+            // Ticks once per second while the view is on screen; SwiftUI pauses
+            // the schedule when the app is inactive or in the background.
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                GaugeProgressView(
+                    title: "Working Time",
+                    value: model.shiftDurationString(at: context.date),
+                    secondaryValue: model.shiftSecondsString(at: context.date),
+                    progress: model.shiftFraction(at: context.date),
+                    progressColor: Color.tachoOrange
+                )
+            }
+        } else {
+            GaugeProgressView(
+                title: "Working Time",
+                value: model.workingTimeString,
+                progress: model.workingFraction,
+                progressColor: Color.tachoOrange
+            )
+        }
     }
 
     private var dayLogCard: some View {

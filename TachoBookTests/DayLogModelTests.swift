@@ -142,4 +142,64 @@ struct DayLogModelTests {
         #expect(model.canCloseDay == false)
         #expect(model.workingMinutes == nil)
     }
+
+    // MARK: - Live shift duration
+
+    private func date(_ day: Int, _ hour: Int, _ minute: Int, _ second: Int = 0) -> Date {
+        var c = DateComponents()
+        c.year = 2026; c.month = 4; c.day = day
+        c.hour = hour; c.minute = minute; c.second = second
+        return Calendar.current.date(from: c)!
+    }
+
+    @Test func testNoShiftHasNoElapsedDuration() {
+        let model = DayLogModel()
+        #expect(model.isShiftOpen == false)
+        #expect(model.shiftElapsedSeconds(at: date(20, 12, 0)) == nil)
+        #expect(model.shiftDurationString(at: date(20, 12, 0)) == "0:00")
+    }
+
+    @Test func testOpenShiftShowsElapsedHoursMinutesSeconds() {
+        let model = DayLogModel()
+        model.setDayStart(date(20, 6, 30))
+        let now = date(20, 13, 35, 9)
+
+        #expect(model.isShiftOpen)
+        #expect(model.shiftElapsedSeconds(at: now) == 7 * 3600 + 5 * 60 + 9)
+        #expect(model.shiftDurationString(at: now) == "7:05")
+        #expect(model.shiftSecondsString(at: now) == "09s")
+    }
+
+    @Test func testElapsedDurationAdvancesFromTimestampsAfterLongBackground() {
+        let model = DayLogModel()
+        model.setDayStart(date(20, 6, 30))
+        // Same model, queried much later: no accumulated counter involved.
+        #expect(model.shiftDurationString(at: date(20, 6, 31, 5)) == "0:01")
+        #expect(model.shiftDurationString(at: date(20, 18, 0)) == "11:30")
+    }
+
+    @Test func testDurationAcrossMidnightAndBeyond24Hours() {
+        let model = DayLogModel()
+        model.setDayStart(date(20, 22, 0))
+
+        #expect(model.shiftDurationString(at: date(21, 2, 15)) == "4:15")
+        #expect(model.shiftDurationString(at: date(21, 23, 0)) == "25:00")
+    }
+
+    @Test func testDurationFreezesWhenShiftEnds() {
+        let model = DayLogModel()
+        model.setDayStart(date(20, 6, 30))
+        model.setDayEnd(date(20, 14, 0))
+
+        #expect(model.isShiftOpen == false)
+        #expect(model.shiftDurationString(at: date(20, 14, 0)) == "7:30")
+        #expect(model.shiftDurationString(at: date(22, 9, 0)) == "7:30")
+        #expect(model.shiftSecondsString(at: date(22, 9, 0)) == "00s")
+    }
+
+    @Test func testStartInFutureClampsToZero() {
+        let model = DayLogModel()
+        model.setDayStart(date(20, 10, 0))
+        #expect(model.shiftElapsedSeconds(at: date(20, 9, 0)) == 0)
+    }
 }

@@ -71,6 +71,39 @@ public final class DayLogModel {
         }
     }
 
+    // MARK: - Live shift duration
+
+    /// A shift is open from the moment its start is logged until its end is logged.
+    public var isShiftOpen: Bool {
+        dayStart != nil && dayEnd == nil
+    }
+
+    /// Whole seconds elapsed since the shift start. Derived from timestamps only,
+    /// so it is correct after launch, foreground, midnight and restarts.
+    /// Frozen at `dayEnd` once the shift has ended.
+    public func shiftElapsedSeconds(at now: Date) -> Int? {
+        guard let start = dayStart else { return nil }
+        let end = dayEnd ?? now
+        return max(0, Int(end.timeIntervalSince(start)))
+    }
+
+    /// Hours and minutes of the elapsed shift duration, e.g. "7:05".
+    public func shiftDurationString(at now: Date) -> String {
+        guard let total = shiftElapsedSeconds(at: now) else { return "0:00" }
+        return String(format: "%d:%02d", total / 3600, (total % 3600) / 60)
+    }
+
+    /// Seconds component of the elapsed shift duration, e.g. "09s".
+    public func shiftSecondsString(at now: Date) -> String {
+        guard let total = shiftElapsedSeconds(at: now) else { return "00s" }
+        return String(format: "%02ds", total % 60)
+    }
+
+    public func shiftFraction(at now: Date) -> Double {
+        guard let total = shiftElapsedSeconds(at: now) else { return 0 }
+        return min(1.0, Double(total) / (15 * 3600))
+    }
+
     public var restTimeString: String {
         if isDayClosed || canCloseDay {
             return "0:20"
