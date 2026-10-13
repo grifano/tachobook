@@ -11,17 +11,59 @@ https://www.figma.com/design/rpZZnwAC53fG7zjQy42Snq/TachoBook--UI-Design
 
 Use the local `figma-desktop` MCP server whenever implementation depends on Figma.
 
+## Shared instructions and task ownership
+
+This repository-root `AGENTS.md` is the shared source of development rules for Codex and Claude Code. Keep it versioned with the code. `CLAUDE.md` imports it; do not maintain a second copy of these rules outside the repository.
+
+- Notion is the source of truth for approved product specifications, task scope, and acceptance criteria. Read the assigned task and linked approved specification before implementation.
+- Figma is the visual source of truth when a task affects UI.
+- Serhii makes final product decisions and approves merging work.
+- Work only on the assigned task. If a task contains an explicit restriction such as "do not commit or push", honor it and resolve the conflict with Serhii before publishing; this default workflow does not silently cancel task-specific restrictions.
+
+## Branches and parallel work
+
+1. Confirm the repository, current branch, and working-tree status before editing. Preserve existing uncommitted work.
+2. Use a separate clone or Git worktree for each concurrently running executor. Never let two agents edit the same working directory.
+3. Fetch the latest remote state and create a new task branch from `origin/main`, unless the task specifies another base. Record the base commit SHA.
+4. Name branches `codex/<task-id-or-short-name>` or `claude/<task-id-or-short-name>`. One task per branch; resume an existing task on its existing branch.
+5. Never implement directly on `main`, push directly to `main`, force-push, or overwrite another executor's branch without explicit authorization.
+6. Commit only task-related files after reviewing the diff. Do not commit credentials, build output, or local IDE state.
+
+When Codex and Claude Code are explicitly assigned the same task for comparison, use the same approved specification, acceptance criteria, and exact base commit SHA in two separate branches and working directories. Do not copy or merge the competing implementation. Open one PR per implementation; Serhii selects which result to accept.
+
+## Task status and review handoff
+
+- `Next`: the task is ready to be started.
+- `Doing`: the assigned executor has started work.
+- `Review`: implementation is ready for human review, with a PR and verification evidence.
+- `Done`: Serhii has approved the result, the selected PR has been merged, and applicable post-merge checks have passed.
+
+For an assigned implementation task, commit and push the task branch and open a pull request targeting `main` after relevant verification, unless the task explicitly restricts publishing. Opening a PR does not authorize merging it.
+
+Include in the PR:
+- The task link, executor, and base commit SHA.
+- What changed and why.
+- Acceptance criteria checked, exact verification commands and results.
+- Any checks not run, blockers, or known limitations.
+- How Serhii can verify the result; include screenshots for visible UI changes.
+
+Update only the assigned Notion task when task-tracking access is available and authorized. Add the branch and PR links and a short verification summary. Never claim a status update succeeded without checking it. If access is unavailable, report the intended transition for Serhii to apply; do not create duplicate tasks or change database properties.
+
+If verification is blocked, report the blocker and keep the task in `Doing`; a draft PR may be used to share progress. Do not present unverified work as ready for review. If changes are requested, return to `Doing` and update the same branch and PR.
+
+Stop at `Review` until Serhii approves merging. Merge only when he explicitly authorizes the executor to do so, or let him merge it himself. After merge, verify the resulting `main` using applicable checks before marking the selected task `Done`. For comparison runs, close the unselected PR without merging and record that it was not selected; do not report that implementation as delivered.
+
 ## Core workflow
 
 For new screens, flows, or meaningful feature work:
 
-1. Inspect the relevant Figma node using Figma MCP.
+1. For UI changes, inspect the relevant Figma node using Figma MCP. For logic-only or documentation tasks, use the approved specification; Figma inspection is not required.
 2. Inspect the existing project structure and reusable components.
 3. Create a short implementation plan before coding.
-4. Implement using native SwiftUI.
+4. Implement UI using native SwiftUI and keep business logic independently testable.
 5. Add or update tests for meaningful logic.
 6. Build and run relevant tests.
-7. Compare the implementation against the Figma screenshot/context.
+7. For UI changes, compare the implementation against the Figma screenshot/context.
 8. Fix visual or behavioral mismatches before declaring the task complete.
 
 For small isolated fixes, keep the process proportional and avoid unnecessary planning overhead.
@@ -90,7 +132,9 @@ Figma frame dimensions represent the reference viewport, not fixed runtime dimen
 - Use Swift Testing for unit and logic tests.
 - Use XCTest for UI tests.
 - Test meaningful behavior and calculations rather than implementation details.
-- Before finishing a substantial task, run the relevant build and tests.
+- Before finishing a substantial code task, run the relevant build and tests on a Mac with a compatible Xcode and simulator. Inspect available schemes and destinations rather than inventing them.
+- Record actual commands and results. If the environment cannot run iOS checks, report them as not run; never infer a passing build from code inspection.
+- For documentation-only changes, review the diff, links, instruction consistency, and imports; an app build is not required.
 
 ## Change discipline
 
@@ -107,5 +151,5 @@ Do not state that a meaningful feature is complete until:
 - the project builds,
 - relevant tests pass,
 - the intended flow works,
-- the implementation has been checked against Figma,
+- UI changes have been checked against Figma,
 - and no known in-scope issue remains unresolved.
