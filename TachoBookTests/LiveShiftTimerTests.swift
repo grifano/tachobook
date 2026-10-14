@@ -47,7 +47,7 @@ struct LiveShiftTimerTests {
     }
 
     @Test func restartRestoresActiveAndRestingStateAndArchivesNewShift() throws {
-        let url = FileManager.default.temporaryDirectory.appending(path: "shift-\(UUID()).json")
+        let url = FileManager.default.temporaryDirectory.appending(path: "shift-\(UUID()).store")
         defer { try? FileManager.default.removeItem(at: url) }
         let model = DayLogModel(storageURL: url)
         model.setDayStart(start)
@@ -83,7 +83,7 @@ struct LiveShiftTimerTests {
         model.deleteEntry(.dayEnd)
         #expect(model.isResting)
         #expect(model.restSegments.count == 1)
-        let url = FileManager.default.temporaryDirectory.appending(path: "broken-\(UUID()).json")
+        let url = FileManager.default.temporaryDirectory.appending(path: "broken-\(UUID()).store")
         defer { try? FileManager.default.removeItem(at: url) }
         let bytes = Data("invalid journal".utf8)
         try bytes.write(to: url)

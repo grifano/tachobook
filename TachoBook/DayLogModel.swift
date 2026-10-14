@@ -15,7 +15,7 @@ public enum LogEntryType: Hashable, Sendable {
 @Observable
 public final class DayLogModel {
     private var state: ShiftJournal
-    private let storageURL: URL?
+    @ObservationIgnored private var store: ShiftStore?
     public private(set) var storageError: String?
 
     public var selectedDate: Date { state.current.date }
@@ -29,15 +29,17 @@ public final class DayLogModel {
     public var isResting: Bool { state.current.rests.last?.end == nil && !state.current.rests.isEmpty }
     public var isShiftOpen: Bool { dayStart != nil && !isResting }
 
-    /// Tests/previews are in-memory unless a storage URL is explicitly supplied.
-    public init(date: Date = Date(), storageURL: URL? = nil) {
-        self.storageURL = storageURL
+    /// Tests/previews are in-memory unless a disk store URL is explicitly supplied.
+    /// A failed disk store is locked, never replaced with an in-memory fallback.
+    public init(date: Date = Date(), storageURL: URL? = nil, legacyURL: URL? = nil) {
         state = ShiftJournal(current: DutyPeriod(date: date))
-        if let storageURL, FileManager.default.fileExists(atPath: storageURL.path) {
+        if let storageURL {
             do {
-                state = try JSONDecoder().decode(ShiftJournal.self, from: Data(contentsOf: storageURL))
+                let store = try ShiftStore(url: storageURL)
+                if let saved = try store.load(legacyURL: legacyURL) { state = saved }
+                self.store = store
             } catch {
-                storageError = "Saved shift could not be read: \(error.localizedDescription)"
+                storageError = "Saved shift could not be opened: \(error.localizedDescription)"
             }
         }
     }
@@ -45,9 +47,22 @@ public final class DayLogModel {
     public static func dashboardModel() -> DayLogModel {
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-sampleData") { return DayLogModel() }
+        #if DEBUG
+        if args.contains("-persistenceUITest") {
+            let url = URL.applicationSupportDirectory.appending(path: "TachoBook/persistence-ui/shifts.store")
+            if args.contains("-resetPersistenceTest") {
+                try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+            }
+            // Deliberately empty: relaunch checks must never reseed missing data.
+            return DayLogModel(storageURL: url)
+        }
         if args.contains("-timerUITest") {
-            let url = URL.applicationSupportDirectory.appending(path: "TachoBook/ui-test-journal.json")
-            if args.contains("-resetTimerTest") { try? FileManager.default.removeItem(at: url) }
+            let url = URL.applicationSupportDirectory.appending(path: "TachoBook/ui-test-shifts.store")
+            if args.contains("-resetTimerTest") {
+                for suffix in ["", "-wal", "-shm"] {
+                    try? FileManager.default.removeItem(atPath: url.path + suffix)
+                }
+            }
             let model = DayLogModel(storageURL: url)
             if model.dayStart == nil {
                 if args.contains("-longRestUITest") {
@@ -61,10 +76,15 @@ public final class DayLogModel {
             }
             return model
         }
-        return DayLogModel(storageURL: defaultStorageURL)
+        #endif
+        return DayLogModel(storageURL: defaultStorageURL, legacyURL: legacyStorageURL)
     }
 
     public static var defaultStorageURL: URL {
+        URL.applicationSupportDirectory.appending(path: "TachoBook/shifts-v1.store")
+    }
+
+    public static var legacyStorageURL: URL {
         URL.applicationSupportDirectory.appending(path: "TachoBook/shift-journal-v1.json")
     }
 
@@ -73,10 +93,9 @@ public final class DayLogModel {
         guard storageError == nil else { return }
         var next = state
         change(&next)
-        if let storageURL {
+        if let store {
             do {
-                try FileManager.default.createDirectory(at: storageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try JSONEncoder().encode(next).write(to: storageURL, options: .atomic)
+                try store.save(next)
             } catch {
                 storageError = "Shift could not be saved: \(error.localizedDescription)"
                 return

@@ -1,0 +1,38 @@
+[
+  {
+    "ZID": "a46dfa287c42488cbe15c6280b2a9b4a",
+    "ZCALENDARZONE": "Europe/Warsaw",
+    "ZDATE": 813489973.209332,
+    "ZSTART": 813489973.209332,
+    "ZEND": 813493573.209332,
+    "ZDRIVINGMINUTES": 92,
+    "ZISCLOSED": 1,
+    "ZISCURRENT": 0,
+    "ZARCHIVEORDER": 0,
+    "ZRESTDATA": "5b5d"
+  },
+  {
+    "ZID": "9d9044bd72d14b44ac6d4982c0820a1f",
+    "ZCALENDARZONE": "Europe/Warsaw",
+    "ZDATE": 813576373.209332,
+    "ZSTART": 813576373.209332,
+    "ZEND": 813579973.209332,
+    "ZDRIVINGMINUTES": 91,
+    "ZISCLOSED": 1,
+    "ZISCURRENT": 0,
+    "ZARCHIVEORDER": 1,
+    "ZRESTDATA": "5b5d"
+  },
+  {
+    "ZID": "fe3f50bfeda7457d97e998c505f22995",
+    "ZCALENDARZONE": "Europe/Warsaw",
+    "ZDATE": 813662773.209332,
+    "ZSTART": 813662773.209332,
+    "ZEND": null,
+    "ZDRIVINGMINUTES": 570,
+    "ZISCLOSED": 0,
+    "ZISCURRENT": 1,
+    "ZARCHIVEORDER": 2,
+    "ZRESTDATA": "5b5d"
+  }
+]
