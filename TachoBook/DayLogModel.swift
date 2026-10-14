@@ -14,14 +14,125 @@ public enum LogEntryType: Hashable, Sendable {
 
 @Observable
 public final class DayLogModel {
-    public var selectedDate: Date
-    public var dayStart: Date?
-    public var drivingMinutes: Int?
-    public var dayEnd: Date?
-    public var isDayClosed: Bool = false
+    private var state: ShiftJournal
+    private let storageURL: URL?
+    public private(set) var storageError: String?
 
-    public init(date: Date = DayLogModel.defaultReferenceDate()) {
-        self.selectedDate = date
+    public var selectedDate: Date { state.current.date }
+    public var dayStart: Date? { state.current.start }
+    public var drivingMinutes: Int? { state.current.drivingMinutes }
+    public var dayEnd: Date? { state.current.end }
+    public var isDayClosed: Bool { state.current.isClosed }
+    public var dutyID: UUID { state.current.id }
+    public var restSegments: [RestSegment] { state.current.rests }
+    public var archivedPeriods: [DutyPeriod] { state.history }
+    public var isResting: Bool { state.current.rests.last?.end == nil && !state.current.rests.isEmpty }
+    public var isShiftOpen: Bool { dayStart != nil && !isResting }
+
+    /// Tests/previews are in-memory unless a storage URL is explicitly supplied.
+    public init(date: Date = Date(), storageURL: URL? = nil) {
+        self.storageURL = storageURL
+        state = ShiftJournal(current: DutyPeriod(date: date))
+        if let storageURL, FileManager.default.fileExists(atPath: storageURL.path) {
+            do {
+                state = try JSONDecoder().decode(ShiftJournal.self, from: Data(contentsOf: storageURL))
+            } catch {
+                storageError = "Saved shift could not be read: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    public static func dashboardModel() -> DayLogModel {
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-sampleData") { return DayLogModel() }
+        if args.contains("-timerUITest") {
+            let url = URL.applicationSupportDirectory.appending(path: "TachoBook/ui-test-journal.json")
+            if args.contains("-resetTimerTest") { try? FileManager.default.removeItem(at: url) }
+            let model = DayLogModel(storageURL: url)
+            if model.dayStart == nil {
+                if args.contains("-longRestUITest") {
+                    model.setDayStart(Date().addingTimeInterval(-16 * 3600))
+                    model.setDrivingMinutes(120)
+                    model.closeShift(at: Date().addingTimeInterval(-11 * 3600))
+                } else {
+                    model.setDayStart(Date().addingTimeInterval(-3661))
+                    model.setDrivingMinutes(120)
+                }
+            }
+            return model
+        }
+        return DayLogModel(storageURL: defaultStorageURL)
+    }
+
+    public static var defaultStorageURL: URL {
+        URL.applicationSupportDirectory.appending(path: "TachoBook/shift-journal-v1.json")
+    }
+
+    private func update(_ change: (inout ShiftJournal) -> Void) {
+        // Preserve an unreadable journal instead of overwriting it with an empty state.
+        guard storageError == nil else { return }
+        var next = state
+        change(&next)
+        if let storageURL {
+            do {
+                try FileManager.default.createDirectory(at: storageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try JSONEncoder().encode(next).write(to: storageURL, options: .atomic)
+            } catch {
+                storageError = "Shift could not be saved: \(error.localizedDescription)"
+                return
+            }
+        }
+        state = next
+    }
+
+    public func shiftElapsedSeconds(at now: Date) -> Int? {
+        guard let start = dayStart else { return nil }
+        let stop = isResting ? state.current.rests.last!.start : now
+        return max(0, Int(stop.timeIntervalSince(start)))
+    }
+
+    public func restElapsedSeconds(at now: Date) -> Int {
+        guard isResting, let rest = restSegments.last else { return 0 }
+        return max(0, Int(now.timeIntervalSince(rest.start)))
+    }
+
+    public static func durationString(seconds: Int) -> String {
+        String(format: "%d:%02d", seconds / 3600, (seconds % 3600) / 60)
+    }
+
+    public func shiftDurationString(at now: Date) -> String {
+        Self.durationString(seconds: shiftElapsedSeconds(at: now) ?? 0)
+    }
+
+    public func shiftSecondsString(at now: Date) -> String {
+        String(format: "%02d", (shiftElapsedSeconds(at: now) ?? 0) % 60)
+    }
+
+    public func restMilestone(hours: Int) -> Date? {
+        guard isResting, let rest = restSegments.last else { return nil }
+        return rest.start.addingTimeInterval(Double(hours) * 3600)
+    }
+
+    /// Records an actual continuation; does not claim legal eligibility.
+    public func resumeShift(at date: Date) {
+        guard isResting, let rest = restSegments.last, date >= rest.start else { return }
+        update { journal in
+            journal.current.rests[journal.current.rests.count - 1].end = date
+            journal.current.end = nil
+            journal.current.isClosed = false
+        }
+    }
+
+    /// Qualification is an explicit external decision, never inferred from a timer.
+    public func startNewShift(at date: Date, dailyRestConfirmed: Bool) {
+        guard dailyRestConfirmed, isResting, let rest = restSegments.last,
+              date.timeIntervalSince(rest.start) >= 9 * 3600 else { return }
+        update { journal in
+            journal.current.rests[journal.current.rests.count - 1].end = date
+            journal.current.rests[journal.current.rests.count - 1].dailyRestConfirmed = true
+            journal.history.append(journal.current)
+            journal.current = DutyPeriod(date: date, start: date)
+        }
     }
 
     public static func defaultReferenceDate() -> Date {
@@ -46,15 +157,15 @@ public final class DayLogModel {
 
     public var workingMinutes: Int? {
         guard let start = dayStart, let end = dayEnd else { return nil }
-        let diff = Calendar.current.dateComponents([.minute], from: start, to: end).minute ?? 0
+        let diff = Int(end.timeIntervalSince(start) / 60)
         return max(0, diff)
     }
 
     public var workingFraction: Double {
-        // Daily working limit max in EU tachograph regulations is typically 15h (900m)
+        // Visual scale only; this timer does not evaluate work/rest eligibility.
         let totalLimit: Double = 15 * 60
         guard let current = workingMinutes else {
-            return dayStart != nil ? (10.0 / totalLimit) : 0.0
+            return 0.0
         }
         return min(1.0, Double(current) / totalLimit)
     }
@@ -65,26 +176,18 @@ public final class DayLogModel {
             let m = minutes % 60
             return String(format: "%d:%02d", h, m)
         } else if dayStart != nil {
-            return "0:10"
+            return "0:00"
         } else {
             return "0:00"
         }
     }
 
     public var restTimeString: String {
-        if isDayClosed || canCloseDay {
-            return "0:20"
-        } else {
-            return "0:00"
-        }
+        Self.durationString(seconds: restElapsedSeconds(at: Date()))
     }
 
     public var restFraction: Double {
-        if isDayClosed || canCloseDay {
-            return 0.15
-        } else {
-            return 0.0
-        }
+        min(1, Double(restElapsedSeconds(at: Date())) / (11 * 3600))
     }
 
     public var canCloseDay: Bool {
@@ -130,44 +233,59 @@ public final class DayLogModel {
     }
 
     public func setDayStart(_ date: Date) {
-        dayStart = date
+        guard !isResting, restSegments.isEmpty, dayEnd.map({ date <= $0 }) ?? true else { return }
+        update { $0.current.start = date; $0.current.date = date }
     }
 
     public func setDrivingMinutes(_ minutes: Int) {
-        drivingMinutes = minutes
+        guard minutes >= 0 else { return }
+        update { $0.current.drivingMinutes = minutes }
     }
 
     public func setDayEnd(_ date: Date) {
-        dayEnd = date
+        guard let start = dayStart, date >= start,
+              restSegments.last(where: { $0.end != nil })?.end.map({ date >= $0 }) ?? true else { return }
+        update { journal in
+            journal.current.end = date
+            if isResting {
+                journal.current.rests[journal.current.rests.count - 1].start = date
+            }
+        }
+    }
+
+    public func closeShift(at date: Date) {
+        guard let start = dayStart, !isResting, date >= start,
+              restSegments.last(where: { $0.end != nil })?.end.map({ date >= $0 }) ?? true else { return }
+        update { journal in
+            journal.current.end = date
+            journal.current.isClosed = true
+            journal.current.rests.append(RestSegment(start: date))
+        }
     }
 
     public func closeDay() {
-        guard canCloseDay else { return }
-        isDayClosed = true
+        guard let end = dayEnd else { return }
+        closeShift(at: end)
     }
 
     public func reopenDay() {
-        // Reopen summary without altering logged day
+        // Reopen summary without altering logged period.
     }
 
     public func deleteEntry(_ type: LogEntryType) {
-        switch type {
-        case .dayStart:
-            dayStart = nil
-        case .driving:
-            drivingMinutes = nil
-        case .dayEnd:
-            dayEnd = nil
-        }
-        if !canCloseDay {
-            isDayClosed = false
+        // Timeline events cannot be removed once rest has begun; preserve segments.
+        guard restSegments.isEmpty || type == .driving else { return }
+        update { journal in
+            switch type {
+            case .dayStart: journal.current.start = nil; journal.current.end = nil
+            case .driving: journal.current.drivingMinutes = nil
+            case .dayEnd: journal.current.end = nil
+            }
+            if journal.current.rests.isEmpty { journal.current.isClosed = false }
         }
     }
 
     public func resetToInitial() {
-        dayStart = nil
-        drivingMinutes = nil
-        dayEnd = nil
-        isDayClosed = false
+        update { $0.current = DutyPeriod(date: selectedDate) }
     }
 }

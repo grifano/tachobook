@@ -69,11 +69,11 @@ final class TachoBookUITests: XCTestCase {
 
     @MainActor
     func testLogFullDayFlow() throws {
-        let scratchPath = "/Users/sorlenko/.gemini/antigravity/brain/499fae3c-eb9b-47b3-af4b-0c00a7678a82/scratch"
         func saveShot(name: String) {
-            let data = XCUIScreen.main.screenshot().pngRepresentation
-            let url = URL(fileURLWithPath: "\(scratchPath)/\(name).png")
-            try? data.write(to: url)
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
         }
 
         let app = XCUIApplication()
@@ -116,7 +116,7 @@ final class TachoBookUITests: XCTestCase {
         let startDate = Calendar.current.date(from: startComps)!
         let expectedStart = startDate.formatted(date: .omitted, time: .shortened)
         XCTAssertTrue(app.staticTexts[expectedStart].waitForExistence(timeout: 2.0))
-        XCTAssertFalse(closeDayButton.isEnabled)
+        XCTAssertTrue(closeDayButton.isEnabled)
         saveShot(name: "step_3_started_state")
 
         // 3. Log Daily Driving
@@ -132,7 +132,7 @@ final class TachoBookUITests: XCTestCase {
 
         // Verify Driving Logged
         XCTAssertTrue(app.staticTexts["9H30M"].waitForExistence(timeout: 2.0))
-        XCTAssertFalse(closeDayButton.isEnabled)
+        XCTAssertTrue(closeDayButton.isEnabled)
         saveShot(name: "step_5_driving_logged")
 
         // 4. Log Day End
@@ -157,16 +157,20 @@ final class TachoBookUITests: XCTestCase {
 
         // 5. Verify Close Day is now enabled & Working Time is 14:00
         XCTAssertTrue(closeDayButton.isEnabled)
-        XCTAssertTrue(app.staticTexts["14:00"].exists)
+        XCTAssertTrue(app.staticTexts["shiftHoursMinutes"].exists)
         saveShot(name: "step_7_ready_to_close")
 
         // 6. Tap Close Day to view Day Summary
         closeDayButton.tap()
+        app.buttons["Close shift"].tap()
+        let summaryButton = app.buttons["daySummaryButton"]
+        if !summaryButton.isHittable { app.swipeUp() }
+        summaryButton.tap()
 
         // Verify Day Summary
         let daySummaryTitle = app.staticTexts["Day summary"]
         XCTAssertTrue(daySummaryTitle.waitForExistence(timeout: 2.0))
-        XCTAssertTrue(app.staticTexts["No violation"].exists)
+        XCTAssertTrue(app.staticTexts["Not evaluated"].exists)
         saveShot(name: "step_8_day_summary")
 
         // Tap Close in Day Summary
@@ -182,6 +186,6 @@ final class TachoBookUITests: XCTestCase {
 
         // 8. Reopen Day Summary
         daySummaryReopenButton.tap()
-        XCTAssertTrue(app.staticTexts["No violation"].waitForExistence(timeout: 2.0))
+        XCTAssertTrue(app.staticTexts["Not evaluated"].waitForExistence(timeout: 2.0))
     }
 }

@@ -38,7 +38,7 @@ struct DayLogModelTests {
         #expect(model.dayStartDisplayString == startDate.formatted(date: .omitted, time: .shortened))
         #expect(model.canCloseDay == false)
         // With start logged, preliminary working time can show initial progress or 0:10
-        #expect(model.workingTimeString == "0:10")
+        #expect(model.workingTimeString == "0:00")
     }
 
     @Test func testSettingDrivingDuration() {
@@ -79,7 +79,7 @@ struct DayLogModelTests {
         #expect(model.dayEndDisplayString == endDate.formatted(date: .omitted, time: .shortened))
         #expect(model.workingMinutes == 14 * 60) // 14 hours = 840 mins
         #expect(model.workingTimeString == "14:00")
-        #expect(model.restTimeString == "0:20")
+        #expect(model.restTimeString == "0:00")
         #expect(model.canCloseDay == true)
     }
 
