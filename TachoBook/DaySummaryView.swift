@@ -51,7 +51,7 @@ public struct DaySummaryView: View {
                     Text("Day summary")
                         .font(.system(.subheadline, weight: .semibold))
                         .foregroundColor(.tachoDark)
-                    Text("\(model.selectedDate.formatted(date: .abbreviated, time: .omitted)) · No violations")
+                    Text("\(model.selectedDate.formatted(date: .abbreviated, time: .omitted)) · Not evaluated")
                         .font(.system(.caption, weight: .medium))
                         .foregroundColor(Color(red: 114/255, green: 114/255, blue: 114/255))
                 }
@@ -112,9 +112,22 @@ public struct DaySummaryView: View {
                     .padding(.top, 16)
                     .padding(.horizontal, 16)
 
-                    // Working Time Gauge
+                    ForEach(model.restSegments) { rest in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(rest.end == nil ? "Rest in progress" : "Rest segment")
+                                .font(.subheadline.weight(.semibold))
+                            Text("\(rest.start.formatted(date: .abbreviated, time: .shortened)) → \(rest.end.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "ongoing")")
+                                .font(.caption)
+                        }
+                        .foregroundStyle(Color.tachoDark)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                    }
+
+                    // Shift duration includes intermediate rests.
                     GaugeProgressView(
-                        title: "Working Time",
+                        title: "Shift elapsed",
                         value: model.workingTimeString,
                         progress: model.workingFraction,
                         progressColor: Color.tachoOrange
@@ -124,10 +137,10 @@ public struct DaySummaryView: View {
 
                     // Violation Status
                     VStack(spacing: 4) {
-                        Image(systemName: "checkmark.shield.fill")
+                        Image(systemName: "questionmark.shield")
                             .font(.system(.title3, weight: .semibold))
                             .foregroundColor(.tachoBlue)
-                        Text("No violation")
+                        Text("Not evaluated")
                             .font(.system(.title3, weight: .semibold))
                             .foregroundColor(.tachoBlue)
                     }
@@ -182,6 +195,7 @@ public struct DaySummaryView: View {
                             .background(Color.tachoGreen)
                             .clipShape(Circle())
                     }
+                    .disabled(type == .dayStart && !model.restSegments.isEmpty)
                     Text("Edit")
                         .font(.system(.footnote, weight: .medium))
                         .foregroundColor(Color.tachoSecondary)
@@ -201,6 +215,7 @@ public struct DaySummaryView: View {
                             .background(Color.tachoRed)
                             .clipShape(Circle())
                     }
+                    .disabled(type != .driving && !model.restSegments.isEmpty)
                     Text("Delete")
                         .font(.system(.footnote, weight: .medium))
                         .foregroundColor(Color.tachoSecondary)

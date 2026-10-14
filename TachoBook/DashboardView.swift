@@ -17,10 +17,12 @@ public enum ActiveFlowSheet: Identifiable {
 }
 
 public struct DashboardView: View {
-    @State public var model = DayLogModel()
+    @State public var model: DayLogModel
     @State private var activeSheet: ActiveFlowSheet? = nil
+    @State private var confirmNewShift = false
+    @State private var confirmCloseShift = false
 
-    public init(model: DayLogModel = DayLogModel()) {
+    public init(model: DayLogModel = DayLogModel.dashboardModel()) {
         self._model = State(initialValue: model)
     }
 
@@ -37,6 +39,11 @@ public struct DashboardView: View {
                     VStack(spacing: 20) {
                         // 1. Today's Limits Card
                         limitsCard
+                        if model.isResting { restControls }
+
+                        if let error = model.storageError {
+                            Text(error).foregroundStyle(.white)
+                        }
 
                         // 2. Day Log Card
                         dayLogCard
@@ -73,7 +80,7 @@ public struct DashboardView: View {
                                 get: {
                                     model.dayStart ?? (ProcessInfo.processInfo.arguments.contains("-sampleData") ? DayLogModel.defaultReferenceDate() : Date())
                                 },
-                                set: { model.dayStart = $0 }
+                                set: { _ in }
                             ),
                             onConfirm: { date in
                                 model.setDayStart(date)
@@ -104,7 +111,7 @@ public struct DashboardView: View {
                                 get: {
                                     model.dayEnd ?? (ProcessInfo.processInfo.arguments.contains("-sampleData") ? DayLogModel.defaultDayEndReferenceDate() : Date())
                                 },
-                                set: { model.dayEnd = $0 }
+                                set: { _ in }
                             ),
                             onConfirm: { date in
                                 model.setDayEnd(date)
@@ -142,6 +149,20 @@ public struct DashboardView: View {
                 .ignoresSafeArea(edges: .bottom)
             }
         }
+        .confirmationDialog("Close shift and start rest?", isPresented: $confirmCloseShift, titleVisibility: .visible) {
+            Button("Close shift") {
+                model.closeShift(at: model.dayEnd ?? Date())
+            }
+        } message: {
+            Text(model.drivingMinutes == nil ? "Did you remember to enter today's total driving time? You can add it later in Day summary." : "Rest starts from the logged end time. You can resume this duty period after a short rest.")
+        }
+        .confirmationDialog("Start a new duty period?", isPresented: $confirmNewShift, titleVisibility: .visible) {
+            Button("Daily rest confirmed — start new shift") {
+                model.startNewShift(at: Date(), dailyRestConfirmed: true)
+            }
+        } message: {
+            Text("Confirm that this uninterrupted rest satisfies your daily-rest requirement. Duration alone does not establish eligibility; reduction counts, split rest and exceptions are not evaluated here.")
+        }
         .background {
             ZStack {
                 Color.tachoDark
@@ -166,20 +187,21 @@ public struct DashboardView: View {
                 .font(.system(.footnote, weight: .semibold))
                 .foregroundColor(.tachoDark)
 
-            HStack(spacing: 32) {
-                GaugeProgressView(
-                    title: "Working Time",
-                    value: model.workingTimeString,
-                    progress: model.workingFraction,
-                    progressColor: Color.tachoOrange
-                )
-
-                GaugeProgressView(
-                    title: "Rest Time",
-                    value: model.restTimeString,
-                    progress: model.restFraction,
-                    progressColor: Color.tachoTrackGray
-                )
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                HStack(spacing: 32) {
+                    GaugeProgressView(
+                        title: "Shift elapsed",
+                        value: model.shiftDurationString(at: context.date),
+                        progress: min(1, Double(model.shiftElapsedSeconds(at: context.date) ?? 0) / (15 * 3600)),
+                        secondaryValue: model.isShiftOpen ? model.shiftSecondsString(at: context.date) : nil
+                    )
+                    GaugeProgressView(
+                        title: "Rest Time",
+                        value: DayLogModel.durationString(seconds: model.restElapsedSeconds(at: context.date)),
+                        progress: min(1, Double(model.restElapsedSeconds(at: context.date)) / (11 * 3600)),
+                        progressColor: .tachoTrackGray
+                    )
+                }
             }
             .frame(maxWidth: .infinity)
         }
@@ -205,6 +227,7 @@ public struct DashboardView: View {
                     title: "Day start",
                     value: model.dayStartDisplayString,
                     identifier: "editDayStartButton",
+                    isEditable: model.restSegments.isEmpty,
                     onEdit: { activeSheet = .dayStart }
                 )
 
@@ -247,6 +270,7 @@ public struct DashboardView: View {
         title: String,
         value: String,
         identifier: String = "",
+        isEditable: Bool = true,
         onEdit: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 8) {
@@ -287,14 +311,44 @@ public struct DashboardView: View {
                         .clipShape(Circle())
                 }
                 .accessibilityIdentifier(identifier)
+                .disabled(!isEditable)
             }
         }
         .frame(minHeight: 52)
     }
 
+    private var restControls: some View {
+        VStack(spacing: 12) {
+            Text("Rest in progress · eligibility not evaluated")
+                .font(.caption).foregroundStyle(Color.tachoDark)
+            if let nine = model.restMilestone(hours: 9), let eleven = model.restMilestone(hours: 11) {
+                Text("9h: \(nine.formatted(date: .abbreviated, time: .shortened)) · 11h: \(eleven.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption).foregroundStyle(Color.tachoDark)
+            }
+            Button("Resume shift") { model.resumeShift(at: Date()) }
+                .buttonStyle(.borderedProminent).tint(.tachoOrange)
+                .accessibilityIdentifier("resumeShiftButton")
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                if model.restElapsedSeconds(at: context.date) >= 9 * 3600 {
+                    Button("Start new shift…") { confirmNewShift = true }
+                        .buttonStyle(.bordered).tint(.tachoOrange)
+                        .accessibilityIdentifier("newShiftButton")
+                }
+            }
+            Text("Records continuation of the same shift. Rest qualification requires review.")
+                .font(.caption).foregroundStyle(Color.tachoDark)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: TachoTheme.cardRadius))
+    }
+
+
     private var actionButton: some View {
         Group {
             if model.isDayClosed {
+
                 // Completed day: "Day summary" button reopens summary
                 Button(action: {
                     activeSheet = .daySummary
@@ -311,20 +365,18 @@ public struct DashboardView: View {
             } else {
                 // Not completed yet: "Close day" button
                 Button(action: {
-                    if model.canCloseDay {
-                        activeSheet = .daySummary
-                    }
+                    confirmCloseShift = true
                 }) {
                     Text("Close day")
                         .font(.body)
-                        .foregroundColor(model.canCloseDay ? .white : Color(red: 60/255, green: 60/255, blue: 67/255).opacity(0.6))
+                        .foregroundColor(model.isShiftOpen ? .white : Color(red: 60/255, green: 60/255, blue: 67/255).opacity(0.6))
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
-                        .background(model.canCloseDay ? Color.tachoOrange : Color.tachoGray)
+                        .background(model.isShiftOpen ? Color.tachoOrange : Color.tachoGray)
                         .clipShape(Capsule())
                 }
                 .accessibilityIdentifier("closeDayButton")
-                .disabled(!model.canCloseDay)
+                .disabled(!model.isShiftOpen || model.storageError != nil)
             }
         }
     }
