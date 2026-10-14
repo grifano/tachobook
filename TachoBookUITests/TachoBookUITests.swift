@@ -144,6 +144,9 @@ final class TachoBookUITests: XCTestCase {
         let endConfirmButton = app.buttons["confirmDayEndButton"]
         XCTAssertTrue(endConfirmButton.waitForExistence(timeout: 2.0))
         saveShot(name: "step_6_day_end_sheet")
+        timePill.tap()
+        XCTAssertTrue(timePicker.waitForExistence(timeout: 2.0))
+        saveShot(name: "step_6_day_end_sheet_expanded_picker")
         endConfirmButton.tap()
 
         // Verify Day End logged

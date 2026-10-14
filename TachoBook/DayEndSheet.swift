@@ -123,6 +123,7 @@ public struct DayEndSheet: View {
             if showTimePicker {
                 DatePicker("", selection: $currentDate, displayedComponents: [.hourAndMinute])
                     .datePickerStyle(.wheel)
+                    .environment(\.colorScheme, .light)
                     .labelsHidden()
                     .frame(height: 216)
                     .frame(maxWidth: .infinity)
