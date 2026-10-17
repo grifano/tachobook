@@ -74,6 +74,15 @@ If verification is blocked, report the blocker and keep the task in `Doing`; a d
 
 Stop at `Review` until Serhii approves merging. Merge only when he explicitly authorizes the executor to do so, or let him merge it himself. After merge, verify the resulting `main` using applicable checks before marking the selected task `Done`. For comparison runs, close the unselected PR without merging and record that it was not selected; do not report that implementation as delivered.
 
+## Communication and documentation
+
+- Write for two audiences. For Serhii, use short, plain Ukrainian. Lead Tasks, specifications, PRs, and completion reports with the outcome, where to test it, what to check, and any decision needed. Describe problems through their effect on the driver.
+- Write agent-facing material in precise English. In Notion Tasks and PRs, place it after the Owner summary in a collapsed “Agent details” section where supported. Specifications may contain full English engineering detail after a short Ukrainian introduction.
+- Make task scope, exclusions, expected behavior, edge cases, and acceptance criteria explicit. Link the relevant approved sources using precise page, frame, node, or file references. Include enough context to execute without chat history; avoid copying entire specifications or repeating this file.
+- Keep all required PR information and verification evidence in the agent section. Distinguish implementation, successful checks, visual inspection, installable availability, and Owner acceptance. State what remains unverified.
+- Explain blockers and product decisions in simple Ukrainian: practical impact, available options, and recommendation. Agents handle routine technical investigation within the existing rules.
+- Report task time, tokens, cost, and human interventions only when supported by task-specific records. Identify the measurement source and boundaries; distinguish work from waiting. Mark missing data as unavailable.
+
 ## Core workflow
 
 For new screens, flows, or meaningful feature work:
