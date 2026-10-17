@@ -6,8 +6,28 @@ TachoBook is a native iOS app built with Swift and SwiftUI.
 
 The Figma design is the visual source of truth for UI implementation.
 
-Figma file:
+## Figma — Development Screens
+
+Approved UI Design:
 https://www.figma.com/design/rpZZnwAC53fG7zjQy42Snq/TachoBook--UI-Design
+
+Development Screens:
+https://www.figma.com/design/rpZZnwAC53fG7zjQy42Snq/TachoBook--UI-Design?node-id=284-5819
+
+When implementing UI:
+
+1. Navigate to the Development Screens page.
+2. Locate the relevant approved screen or component.
+3. Read its design context using Figma MCP.
+4. Retrieve the reference screenshot.
+5. Implement the design in native SwiftUI.
+6. Compare the implementation against Figma.
+
+Do not assume the default Cover page contains
+the approved implementation designs.
+
+Use direct frame/node links from the assigned
+Notion Task whenever available.
 
 Use the local `figma-desktop` MCP server whenever implementation depends on Figma.
 
@@ -41,6 +61,7 @@ When Codex and Claude Code are explicitly assigned the same task for comparison,
 For an assigned implementation task, commit and push the task branch and open a pull request targeting `main` after relevant verification, unless the task explicitly restricts publishing. Opening a PR does not authorize merging it.
 
 Include in the PR:
+
 - The task link, executor, and base commit SHA.
 - What changed and why.
 - Acceptance criteria checked, exact verification commands and results.
