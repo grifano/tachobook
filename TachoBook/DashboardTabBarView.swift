@@ -6,6 +6,7 @@
 import SwiftUI
 
 public struct DashboardTabBarView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption2) private var tabLabelSize: CGFloat = 10
     @ScaledMetric(relativeTo: .body) private var tabIconSize: CGFloat = 24
     @ScaledMetric(relativeTo: .body) private var tabIconHeight: CGFloat = 28
@@ -21,9 +22,10 @@ public struct DashboardTabBarView: View {
         }
         .padding(4)
         // Let the system render the optical glass, edge lighting, and shadow.
-        // The orange selection remains a solid fill, as specified in Figma.
-        .glassEffect(.clear, in: Capsule())
-        .background(.black.opacity(0.2), in: Capsule())
+        // The blue tint and solid blue selection follow Figma "Tab Bar - iPhone".
+        .glassEffect(.regular.tint(Color.tachoBlue.opacity(0.5)), in: Capsule())
+        // Figma darkens the tint over the photo in either system appearance.
+        .environment(\.colorScheme, .dark)
         .padding(.horizontal, 21)
         .padding(.top, 12)
     }
@@ -36,9 +38,13 @@ public struct DashboardTabBarView: View {
                 .frame(height: tabIconHeight)
                 .accessibilityHidden(true)
 
-            Text(title)
-                .font(.system(size: tabLabelSize, weight: .semibold))
-                .tracking(-0.1)
+            // Above XXL text the bar shows icons only, like the system tab bar;
+            // the name stays available to VoiceOver and the Large Content Viewer.
+            if dynamicTypeSize <= .xxLarge {
+                Text(title)
+                    .font(.system(size: tabLabelSize, weight: .semibold))
+                    .tracking(-0.1)
+            }
         }
         .foregroundStyle(.white)
         .padding(.top, 6)
@@ -46,10 +52,15 @@ public struct DashboardTabBarView: View {
         .frame(maxWidth: .infinity)
         .background {
             if isSelected {
-                Capsule().fill(Color.tachoOrange)
+                Capsule().fill(Color.tachoBlue)
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityShowsLargeContentViewer {
+            Image(systemName: symbol)
+            Text(title)
+        }
     }
 }

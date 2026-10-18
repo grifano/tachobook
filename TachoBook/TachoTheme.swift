@@ -18,6 +18,26 @@ public enum TachoTheme {
     public static let separator = Color(red: 230/255, green: 230/255, blue: 230/255)   // #E6E6E6
     public static let cardRadius: CGFloat = 20
     public static let buttonRadius: CGFloat = 1000
+
+    // Home (Figma "Flow 1 - Log Day Shift")
+    public static let widgetRadius: CGFloat = 34
+    public static let widgetFill = Color(red: 245/255, green: 245/255, blue: 245/255).opacity(0.8)
+    public static let gaugeTrack = Color(red: 209/255, green: 209/255, blue: 214/255)       // #D1D1D6
+    public static let rule = Color(red: 120/255, green: 120/255, blue: 120/255)             // #787878
+    public static let controlFill = Color(red: 120/255, green: 120/255, blue: 120/255).opacity(0.4)
+    public static let doneFill = Color(red: 163/255, green: 208/255, blue: 179/255)         // #A3D0B3
+
+    // Text and filled-button colours darkened from Figma (#116B93, #E8652A, #DE635A, #2D5C40,
+    // #BFBFBF on 40 % gray) so the XCTest accessibility audit's contrast check passes.
+    public static let blueText = Color(red: 8/255, green: 63/255, blue: 88/255)             // #083F58
+    public static let orangeStrong = Color(red: 196/255, green: 82/255, blue: 29/255)       // #C4521D
+    public static let warningText = Color(red: 163/255, green: 50/255, blue: 43/255)        // #A3322B
+    public static let doneLabel = Color(red: 31/255, green: 74/255, blue: 49/255)           // #1F4A31
+    public static let dimmedFill = Color(white: 0.86)
+    public static let dimmedLabel = Color(red: 79/255, green: 79/255, blue: 79/255)         // #4F4F4F
+    public static let sheetSubtitle = Color(red: 114/255, green: 114/255, blue: 114/255)    // #727272
+    public static let sheetCloseFill = Color(red: 116/255, green: 116/255, blue: 128/255).opacity(0.08)
+    public static let iconCircleFill = Color(red: 228/255, green: 228/255, blue: 228/255).opacity(0.3)
 }
 
 extension Color {
@@ -31,4 +51,19 @@ extension Color {
     public static var tachoTrackGray: Color { TachoTheme.trackGray }
     public static var tachoSeparator: Color { TachoTheme.separator }
     public static var tachoCardBorder: Color { TachoTheme.cardBorder }
+    public static var tachoGaugeTrack: Color { TachoTheme.gaugeTrack }
+    public static var tachoRule: Color { TachoTheme.rule }
+}
+
+extension View {
+    /// Figma Home widget surface: the light 80 % fill over a native blur material, with a soft shadow.
+    /// A Liquid Glass variant rendered either too gray or too transparent next to Figma.
+    func homeWidgetBackground() -> some View {
+        let shape = RoundedRectangle(cornerRadius: TachoTheme.widgetRadius, style: .continuous)
+        return background {
+            shape.fill(.ultraThinMaterial).environment(\.colorScheme, .light)
+            shape.fill(TachoTheme.widgetFill)
+        }
+        .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
+    }
 }

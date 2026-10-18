@@ -5,183 +5,122 @@
 
 import SwiftUI
 
+/// Figma frame 07: total driving time for the shift, typed on a numeric keypad as h + mm.
 public struct DailyDrivingSheet: View {
     @ScaledMetric(relativeTo: .largeTitle) private var durationSize: CGFloat = 64
-    public var initialMinutes: Int?
     public var onConfirm: (Int) -> Void
     public var onCancel: () -> Void
 
-    @State private var hours: Int = 9
-    @State private var minutes: Int = 30
-    @State private var inputBuffer: String = "930" // represents 9h30
+    @State private var entry: DrivingEntry
 
-    public init(
-        initialMinutes: Int? = 570,
-        onConfirm: @escaping (Int) -> Void,
-        onCancel: @escaping () -> Void
-    ) {
-        self.initialMinutes = initialMinutes
+    public init(initialMinutes: Int?, onConfirm: @escaping (Int) -> Void, onCancel: @escaping () -> Void) {
         self.onConfirm = onConfirm
         self.onCancel = onCancel
-    }
-
-    private var displayDurationString: String {
-        let totalMinutes = computedMinutes
-        let h = totalMinutes / 60
-        let m = totalMinutes % 60
-        return String(format: "%dh%02d", h, m)
-    }
-
-    private var computedMinutes: Int {
-        if inputBuffer.isEmpty {
-            return 0
-        }
-        if inputBuffer.count <= 2 {
-            let m = Int(inputBuffer) ?? 0
-            return m
-        } else {
-            let mString = String(inputBuffer.suffix(2))
-            let hString = String(inputBuffer.dropLast(2))
-            let h = Int(hString) ?? 0
-            let m = Int(mString) ?? 0
-            return (h * 60) + min(59, m)
-        }
+        _entry = State(initialValue: DrivingEntry(minutes: initialMinutes))
     }
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Grabber
-            RoundedRectangle(cornerRadius: 100)
-                .fill(Color.tachoOrange)
-                .frame(width: 36, height: 5)
-                .padding(.top, 10)
-
-            // Header Controls
-            HStack {
-                Button(action: onCancel) {
-                    Image(systemName: "xmark")
-                        .font(.system(.subheadline, weight: .semibold))
-                        .foregroundColor(.tachoDark)
-                        .frame(width: 44, height: 44)
-                        .background(Color.tachoGray)
-                        .clipShape(Circle())
-                }
-
-                Spacer()
-
-                VStack(spacing: 2) {
-                    Text("Daily driving")
-                        .font(.system(.subheadline, weight: .semibold))
-                        .foregroundColor(.tachoDark)
-                    Text("How long did you drive today?")
-                        .font(.system(.caption, weight: .medium))
-                        .foregroundColor(Color(red: 114/255, green: 114/255, blue: 114/255))
-                }
-
-                Spacer()
-
-                Button(action: {
-                    onConfirm(computedMinutes)
-                }) {
-                    Image(systemName: "checkmark")
-                        .font(.system(.subheadline, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Color.tachoOrange)
-                        .clipShape(Circle())
-                }
-                .accessibilityIdentifier("confirmDrivingButton")
+            SheetToolbar(title: "Driving time", subtitle: "How long are you driving today?",
+                         canConfirm: entry.minutes != nil, onCancel: onCancel,
+                         onConfirm: { entry.minutes.map(onConfirm) })
+            VStack(spacing: 16) {
+                SheetSymbol(image: "SheetDrivingIcon", height: 36)
+                Text(entry.display)
+                    .font(.system(size: durationSize, weight: .bold))
+                    .tracking(0.4)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .foregroundStyle(Color.tachoDark)
+                    .accessibilityLabel("Driving time \(entry.display)")
+                    .accessibilityIdentifier("drivingValue")
             }
             .padding(.horizontal, 16)
-            .padding(.top, 12)
+            .padding(.top, 38)
+            Spacer(minLength: 24)
+            keypad
+        }
+        .environment(\.colorScheme, .light)
+        .presentationDetents([.height(619), .large])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(.white)
+    }
 
-            Spacer(minLength: 12)
-
-            // Symbol
-            ZStack {
-                Circle()
-                    .fill(Color.tachoGray)
-                    .frame(width: 68, height: 68)
-
-                TachoDrivingSymbol(color: Color.tachoDark.opacity(0.6))
-                    .frame(width: 26, height: 26)
-            }
-            .padding(.bottom, 12)
-
-            // Large duration display (64pt bold)
-            Text(displayDurationString)
-                .font(.system(size: durationSize, weight: .bold))
-                .foregroundColor(.tachoDark)
-                .tracking(0.4)
-
-            Spacer(minLength: 12)
-
-            // Numeric Keypad
-            VStack(spacing: 6) {
-                // Row 1
+    private var keypad: some View {
+        VStack(spacing: 6) {
+            ForEach([["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"]], id: \.self) { row in
                 HStack(spacing: 6) {
-                    KeypadButton(title: "1") { handleDigit("1") }
-                    KeypadButton(title: "2") { handleDigit("2") }
-                    KeypadButton(title: "3") { handleDigit("3") }
-                }
-                // Row 2
-                HStack(spacing: 6) {
-                    KeypadButton(title: "4") { handleDigit("4") }
-                    KeypadButton(title: "5") { handleDigit("5") }
-                    KeypadButton(title: "6") { handleDigit("6") }
-                }
-                // Row 3
-                HStack(spacing: 6) {
-                    KeypadButton(title: "7") { handleDigit("7") }
-                    KeypadButton(title: "8") { handleDigit("8") }
-                    KeypadButton(title: "9") { handleDigit("9") }
-                }
-                // Row 4
-                HStack(spacing: 6) {
-                    Color.clear
-                        .frame(height: 50)
-                        .frame(maxWidth: .infinity)
-
-                    KeypadButton(title: "0") { handleDigit("0") }
-
-                    Button(action: handleDelete) {
-                        Image(systemName: "delete.backward")
-                            .font(.title3)
-                            .foregroundColor(Color(red: 89/255, green: 89/255, blue: 89/255))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(Color.white.opacity(0.3))
-                            .clipShape(RoundedRectangle(cornerRadius: 8.5))
+                    ForEach(row, id: \.self) { digit in
+                        KeypadButton(title: digit) { entry.append(digit) }
                     }
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.top, 14)
-            .padding(.bottom, 24)
-            .background(
-                Color(red: 230/255, green: 233/255, blue: 237/255)
-                    .clipShape(RoundedRectangle(cornerRadius: 27, style: .continuous))
-            )
+            HStack(spacing: 6) {
+                Color.clear.frame(maxWidth: .infinity).frame(height: 50)
+                KeypadButton(title: "0") { entry.append("0") }
+                Button { entry.deleteLast() } label: {
+                    Image(systemName: "delete.backward")
+                        .font(.title3)
+                        .foregroundStyle(Color(red: 89/255, green: 89/255, blue: 89/255))
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Delete")
+            }
         }
-        .frame(maxWidth: .infinity)
-        .background(Color.white)
-        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 38, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 38, style: .continuous))
-        .shadow(color: Color.black.opacity(0.18), radius: 25, y: -5)
+        .padding(.horizontal, 7.67)
+        .padding(.top, 24)
+        .padding(.bottom, 42)
+        .background {
+            UnevenRoundedRectangle(topLeadingRadius: 27, bottomLeadingRadius: 62,
+                                   bottomTrailingRadius: 62, topTrailingRadius: 27, style: .continuous)
+                .fill(Color(red: 230/255, green: 233/255, blue: 237/255))
+                .ignoresSafeArea(edges: .bottom)
+        }
+    }
+}
+
+/// Keypad input: the last two digits are minutes. Prefilled values are replaced by the first key.
+struct DrivingEntry: Equatable {
+    private(set) var digits: String
+    private var replacesOnInput: Bool
+
+    init(minutes: Int?) {
+        if let minutes {
+            digits = String(format: "%d%02d", minutes / 60, minutes % 60)
+            replacesOnInput = true
+        } else {
+            digits = ""
+            replacesOnInput = false
+        }
     }
 
-    private func handleDigit(_ digit: String) {
-        if inputBuffer == "930" && digit != "9" {
-            // First keystroke replaces default unless editing
-            inputBuffer = digit
-        } else if inputBuffer.count < 4 {
-            inputBuffer.append(digit)
-        }
+    /// nil while empty or when the minutes part is above 59: such values cannot be confirmed.
+    var minutes: Int? {
+        guard !digits.isEmpty, let value = Int(digits) else { return nil }
+        let (hours, mins) = value.quotientAndRemainder(dividingBy: 100)
+        return mins < 60 ? hours * 60 + mins : nil
     }
 
-    private func handleDelete() {
-        if !inputBuffer.isEmpty {
-            inputBuffer.removeLast()
+    var display: String {
+        let value = Int(digits) ?? 0
+        return String(format: "%dh%02d", value / 100, value % 100)
+    }
+
+    mutating func append(_ digit: String) {
+        if replacesOnInput {
+            digits = ""
+            replacesOnInput = false
         }
+        guard digits.count < 4 else { return }
+        // Leading zeros carry no value: "0", "5", "2" reads as 0h52.
+        digits = String(Int(digits + digit) ?? 0)
+    }
+
+    mutating func deleteLast() {
+        replacesOnInput = false
+        if !digits.isEmpty { digits.removeLast() }
     }
 }
 
@@ -194,11 +133,9 @@ struct KeypadButton: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: digitSize))
-                .foregroundColor(.black)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(Color.white.opacity(0.3))
-                .clipShape(RoundedRectangle(cornerRadius: 8.5))
+                .foregroundStyle(Color.tachoDark)
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .background(.white, in: RoundedRectangle(cornerRadius: 8.5, style: .continuous))
         }
     }
 }

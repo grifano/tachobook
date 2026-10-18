@@ -28,6 +28,8 @@ public final class DayLogModel {
     public var archivedPeriods: [DutyPeriod] { state.history }
     public var isResting: Bool { state.current.rests.last?.end == nil && !state.current.rests.isEmpty }
     public var isShiftOpen: Bool { dayStart != nil && !isResting }
+    public var restKind: RestKind { restSegments.last?.kind ?? .daily }
+    public var currentRestStart: Date? { isResting ? restSegments.last?.start : nil }
 
     /// Tests/previews are in-memory unless a disk store URL is explicitly supplied.
     /// A failed disk store is locked, never replaced with an in-memory fallback.
@@ -76,8 +78,58 @@ public final class DayLogModel {
             }
             return model
         }
+        if args.contains("-homeFlowUITest") {
+            let url = URL.applicationSupportDirectory.appending(path: "TachoBook/home-flow-ui/shifts.store")
+            if args.contains("-resetHomeFlowTest") {
+                try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+            }
+            let model = DayLogModel(storageURL: url)
+            if args.contains("-seedReadyWeeklyRest") {
+                let restStart = Date().addingTimeInterval(-46 * 3600)
+                model.seedWeeklyRestIfEmpty(shiftStart: restStart.addingTimeInterval(-3 * 3600),
+                                            restStart: restStart, drivingMinutes: 128)
+            } else if args.contains("-seedNearDutyLimit"), model.isEmpty {
+                model.setDayStart(Date().addingTimeInterval(-(14 * 3600 + 45 * 60)))
+            } else if args.contains("-seedDailyRestNearEleven"), model.isEmpty {
+                // A daily rest 20 s short of 11 h, to watch it switch to the weekly card.
+                let now = Date()
+                model.setDayStart(now.addingTimeInterval(-24 * 3600))
+                model.closeShift(at: now.addingTimeInterval(-(11 * 3600 - 20)))
+            }
+            return model
+        }
         #endif
-        return DayLogModel(storageURL: defaultStorageURL, legacyURL: legacyStorageURL)
+        let model = DayLogModel(storageURL: defaultStorageURL, legacyURL: legacyStorageURL)
+        #if DEBUG
+        if args.contains("-seedHomeFlow") { model.seedFigmaSampleIfEmpty() }
+        #endif
+        return model
+    }
+
+    #if DEBUG
+    /// Figma frame 01 sample: shift 17.10.2026 05:40–08:34, driving 02:08, then
+    /// weekly rest from 08:34 in device local time. Never replaces stored data.
+    public func seedFigmaSampleIfEmpty(calendar: Calendar = .current) {
+        func date(_ hour: Int, _ minute: Int) -> Date? {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: 17, hour: hour, minute: minute))
+        }
+        guard let start = date(5, 40), let restStart = date(8, 34) else { return }
+        seedWeeklyRestIfEmpty(shiftStart: start, restStart: restStart, drivingMinutes: 128)
+    }
+
+    public func seedWeeklyRestIfEmpty(shiftStart: Date, restStart: Date, drivingMinutes: Int) {
+        guard isEmpty, shiftStart <= restStart else { return }
+        update { journal in
+            journal.current = DutyPeriod(date: shiftStart, start: shiftStart, drivingMinutes: drivingMinutes,
+                                         end: restStart, isClosed: true,
+                                         rests: [RestSegment(start: restStart, kind: .weekly)])
+        }
+    }
+    #endif
+
+    /// No current or archived record exists yet.
+    public var isEmpty: Bool {
+        dayStart == nil && dayEnd == nil && drivingMinutes == nil && restSegments.isEmpty && archivedPeriods.isEmpty
     }
 
     public static var defaultStorageURL: URL {
@@ -145,7 +197,7 @@ public final class DayLogModel {
     /// Qualification is an explicit external decision, never inferred from a timer.
     public func startNewShift(at date: Date, dailyRestConfirmed: Bool) {
         guard dailyRestConfirmed, isResting, let rest = restSegments.last,
-              date.timeIntervalSince(rest.start) >= 9 * 3600 else { return }
+              date.timeIntervalSince(rest.start) >= Double(restKind.requiredHours) * 3600 else { return }
         update { journal in
             journal.current.rests[journal.current.rests.count - 1].end = date
             journal.current.rests[journal.current.rests.count - 1].dailyRestConfirmed = true
@@ -278,8 +330,81 @@ public final class DayLogModel {
         update { journal in
             journal.current.end = date
             journal.current.isClosed = true
-            journal.current.rests.append(RestSegment(start: date))
+            // Every rest started by closing a shift in the app is daily.
+            journal.current.rests.append(RestSegment(start: date, kind: .daily))
         }
+    }
+
+    // MARK: - Home commands with validation (R-E01: no end before start, no overlap)
+
+    /// The end of the previous archived period's rest, which the current start must not precede.
+    private var previousRest: RestSegment? { archivedPeriods.last?.rests.last }
+
+    private var lastClosedRestEnd: Date? { restSegments.last(where: { $0.end != nil })?.end }
+
+    /// Start of day: available once the current rest reached its required milestone.
+    public func canStartShift(at date: Date, now: Date) -> Bool {
+        guard date <= now else { return false }
+        if isResting, let rest = restSegments.last {
+            return date.timeIntervalSince(rest.start) >= Double(restKind.requiredHours) * 3600
+        }
+        guard dayStart == nil else { return false }
+        return previousRest?.end.map { date >= $0 } ?? true
+    }
+
+    public func startShift(at date: Date, now: Date) {
+        guard canStartShift(at: date, now: now) else { return }
+        if isResting {
+            startNewShift(at: date, dailyRestConfirmed: true)
+        } else {
+            setDayStart(date)
+        }
+    }
+
+    /// End of day: closes the open shift and starts a daily rest at `date`.
+    public func canCloseShift(at date: Date, now: Date) -> Bool {
+        guard isShiftOpen, let start = dayStart else { return false }
+        return date >= start && date <= now && (lastClosedRestEnd.map { date >= $0 } ?? true)
+    }
+
+    public func closeShift(at date: Date, now: Date) {
+        guard canCloseShift(at: date, now: now) else { return }
+        closeShift(at: date)
+    }
+
+    /// Editing Day started keeps the previous rest linked to it when they share the instant.
+    public func canEditDayStart(_ date: Date, now: Date) -> Bool {
+        guard let current = dayStart, date <= now else { return false }
+        if let end = dayEnd, date > end { return false }
+        if let firstRest = restSegments.first, date > firstRest.start { return false }
+        if let previous = previousRest {
+            if previous.end == current { return date >= previous.start }
+            if let end = previous.end, date < end { return false }
+        }
+        return true
+    }
+
+    public func editDayStart(_ date: Date, now: Date) {
+        guard canEditDayStart(date, now: now), let current = dayStart else { return }
+        let linked = previousRest?.end == current
+        update { journal in
+            journal.current.start = date
+            journal.current.date = date
+            if linked, let last = journal.history.indices.last, !journal.history[last].rests.isEmpty {
+                journal.history[last].rests[journal.history[last].rests.count - 1].end = date
+            }
+        }
+    }
+
+    /// Editing Day closed moves the running rest start with it.
+    public func canEditDayEnd(_ date: Date, now: Date) -> Bool {
+        guard dayEnd != nil, let start = dayStart else { return false }
+        return date >= start && date <= now && (lastClosedRestEnd.map { date >= $0 } ?? true)
+    }
+
+    public func editDayEnd(_ date: Date, now: Date) {
+        guard canEditDayEnd(date, now: now) else { return }
+        setDayEnd(date)
     }
 
     public func closeDay() {
