@@ -22,7 +22,9 @@ public struct DashboardHeaderView: View {
         let calendar = Calendar.current
         return (-2...2).compactMap { offset in
             guard let target = calendar.date(byAdding: .day, value: offset, to: date) else { return nil }
-            let opacity = offset == 0 ? 1.0 : (abs(offset) == 1 ? 0.5 : 0.25)
+            // Figma fades neighbours to 50 % and 25 % opacity; solid lighter grays keep the
+            // hierarchy with readable contrast (the audit rejects translucent text).
+            let opacity = offset == 0 ? 1.0 : (abs(offset) == 1 ? 0.93 : 0.86)
             return (target.formatted(.dateTime.day()), target.formatted(.dateTime.weekday(.short)), opacity)
         }
     }
@@ -69,6 +71,7 @@ public struct DashboardHeaderView: View {
 struct WeekDayItem: View {
     var day: String
     var weekday: String
+    /// White level of the text: 1 for today, lower for the neighbouring days.
     var opacity: Double
 
     var body: some View {
@@ -78,7 +81,7 @@ struct WeekDayItem: View {
             Text(weekday)
                 .font(.caption)
         }
-        .foregroundStyle(.white.opacity(opacity))
+        .foregroundStyle(Color(white: opacity))
         .lineLimit(1)
         .minimumScaleFactor(0.7)
         .frame(maxWidth: .infinity, minHeight: 44)

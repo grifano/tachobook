@@ -62,11 +62,16 @@ public struct DashboardView: View {
                 .padding(.bottom, 8)
         }
         .background {
-            Image("DashboardBackground")
-                .resizable()
-                .scaledToFill()
-                .overlay(Color.black.opacity(0.2))
-                .ignoresSafeArea()
+            ZStack(alignment: .top) {
+                Image("DashboardBackground")
+                    .resizable()
+                    .scaledToFill()
+                    .overlay(Color.black.opacity(0.2))
+                // Darker top so the white header and week strip keep their contrast over the sky.
+                LinearGradient(colors: [.black.opacity(0.55), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 480)
+            }
+            .ignoresSafeArea()
         }
         .onChange(of: model.isResting) { tabOverride = nil }
         .sheet(item: $sheet, onDismiss: presentPendingDrivingAlert) { sheet in
@@ -106,7 +111,7 @@ public struct DashboardView: View {
                 Button { sheet = .closeShift } label: {
                     HomeCapsuleLabel(symbol: "stop.circle", title: "End of day", style: .primary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HomeCapsuleButtonStyle())
                 .disabled(model.storageError != nil)
                 .accessibilityIdentifier("endOfDayButton")
             }
@@ -164,7 +169,7 @@ public struct DashboardView: View {
                 icon: "HomeRestIcon", iconSize: CGSize(width: 40, height: 27),
                 title: kind == .weekly ? "Weekly Rest" : "Rest Time",
                 subtitle: "Closed \(HomeTimeline.dateLabel(restStart)) · \(HomeTimeline.clockLabel(restStart, relativeTo: restStart))",
-                accent: .tachoBlue, tab: tab, isRestEnabled: true,
+                accent: TachoTheme.blueText, tab: tab, isRestEnabled: true,
                 gauge: GaugeProgressView(
                     limit: "\(kind.requiredHours)h",
                     value: HomeTimeline.clockDuration(seconds: elapsed),
@@ -190,7 +195,7 @@ public struct DashboardView: View {
                              style: isAvailable ? .primary : .dimmed,
                              titleFont: .headline, subtitleFont: .footnote)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HomeCapsuleButtonStyle())
         .disabled(!isAvailable)
         .accessibilityIdentifier("startOfDayButton")
     }

@@ -27,11 +27,36 @@ captured on 18.10 around 14:45. Frames 02–09 come from the UI tests, which see
 | Edit Day closed (prefilled) | — | ![](edit-day-closed-402.jpg) | ![](edit-day-closed-390.jpg) |
 | Accessibility text size M | — | ![](large-text-ax-402.jpg) | ![](large-text-ax-390.jpg) |
 
+## Contrast update (Serhii's request, 18.10.2026)
+
+Colours darkened so the XCTest accessibility audit passes **every category, contrast included**, in five
+states (rest finished, work, daily rest, rest with Work tab, near the 15 h limit) at 402 and 390 pt.
+
+| Element | Figma | Now |
+|---|---|---|
+| Blue captions and card titles | #116B93 | #083F58 |
+| Start of day / End of day fill (white text) | #E8652A | #C4521D |
+| Red remaining time | #DE635A | #A3322B |
+| Start at / End at text on green | #2D5C40 | #1F4A31 |
+| Dimmed Start of day | #BFBFBF on 40 % gray, translucent | #4F4F4F on solid #DBDBDB |
+| Week strip neighbours | white at 50 % / 25 % | solid 93 % / 86 % white, darker top scrim |
+| Work/Rest toggle | custom, coloured selected label | native segmented control (black selected label) |
+| Widget subtitle | 12 pt regular | 12 pt medium |
+
+Gauge arcs, tab bar and icons keep the Figma colours (graphics, not text).
+
+![Before and after: 01 and 08](contrast-01-08.jpg)
+![Before and after: 03 and 04](contrast-03-04.jpg)
+![Before and after: 09 and 01 rest done](contrast-09-ready.jpg)
+
+Individual "before" captures: `contrast-before/`.
+
 ## Known visual differences
 
 - Native sheets dim Home behind them; Figma shows no dimming.
 - The native iOS 26 alert (frame 06) adapts its glass to the dimmed photo and renders dark; Figma shows a light alert.
 - Widgets use a light 80 % fill over a native blur material. Liquid Glass variants rendered too gray or too transparent next to Figma.
+- Colours are darker than Figma for contrast (see above).
 - The three bed icons under the gauge (reduced-rest counter) and country codes ("F ·", "DE·") are out of scope and not shown.
 - Text wraps or the layout stacks at large text sizes; at accessibility sizes the tab bar shows icons only (names stay for VoiceOver and the Large Content Viewer).
 

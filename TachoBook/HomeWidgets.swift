@@ -11,45 +11,21 @@ public enum HomeTab: String, Hashable {
     case rest
 }
 
+/// Figma "View segmented control" is Apple's segmented control; the native one is used.
 struct HomeTabPicker: View {
     @Binding var selection: HomeTab
     var isRestEnabled: Bool
 
     var body: some View {
-        HStack(spacing: 2) {
-            segment(.work, title: "Work")
-            segment(.rest, title: "Rest")
+        Picker("View", selection: $selection) {
+            Text("Work").tag(HomeTab.work)
+            Text("Rest").tag(HomeTab.rest)
+                .selectionDisabled(!isRestEnabled)
         }
-        .padding(3)
-        .background(TachoTheme.controlFill, in: Capsule())
-    }
-
-    private func segment(_ tab: HomeTab, title: String) -> some View {
-        let isSelected = selection == tab
-        return Button {
-            selection = tab
-        } label: {
-            Text(title)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(labelColor(for: tab))
-                .lineLimit(1)
-                .frame(minWidth: 64, minHeight: 28)
-                .background {
-                    if isSelected { Capsule().fill(.white) }
-                }
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(tab == .rest && !isRestEnabled)
-        .accessibilityIdentifier("\(tab.rawValue)Segment")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private func labelColor(for tab: HomeTab) -> Color {
-        switch selection {
-        case .rest: .tachoBlue
-        case .work: tab == .work ? .tachoOrange : .tachoDark
-        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(minWidth: 112, maxWidth: 136)
+        .accessibilityIdentifier("homeTabPicker")
     }
 }
 
@@ -113,11 +89,13 @@ struct HomeMainWidget: View {
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.caption.weight(.medium))
             }
             .foregroundStyle(accent)
             .homeTextFit()
         }
+        // The title keeps its full size; the toggle narrows first on smaller screens.
+        .layoutPriority(1)
     }
 
     private var limitsColumn: some View {
@@ -149,9 +127,9 @@ enum HomeButtonStyle {
 
     var fill: Color {
         switch self {
-        case .primary: .tachoOrange
+        case .primary: TachoTheme.orangeStrong
         case .done: TachoTheme.doneFill
-        case .dimmed: TachoTheme.controlFill
+        case .dimmed: TachoTheme.dimmedFill
         }
     }
 
@@ -161,6 +139,14 @@ enum HomeButtonStyle {
         case .done: TachoTheme.doneLabel
         case .dimmed: TachoTheme.dimmedLabel
         }
+    }
+}
+
+/// Shows the capsule's own dimmed colours when disabled instead of the system's translucent
+/// dimming, which lowered text contrast over the photo.
+struct HomeCapsuleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.opacity(configuration.isPressed ? 0.8 : 1)
     }
 }
 
@@ -218,7 +204,7 @@ struct HomeSecondaryCard<Item: View>: View {
             Label(title, systemImage: symbol)
                 .labelStyle(SpacedLabelStyle())
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.tachoBlue)
+                .foregroundStyle(TachoTheme.blueText)
                 .accessibilityAddTraits(.isHeader)
             let layout = dynamicTypeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(spacing: 16)) : AnyLayout(HStackLayout(spacing: 20))
@@ -260,7 +246,10 @@ struct HomeValueColumn: View {
                 if let valueSymbol {
                     Image(systemName: valueSymbol).accessibilityHidden(true)
                 }
-                Text(value).monospacedDigit()
+                Text(value)
+                    .monospacedDigit()
+                    // The thin "?" placeholder needs a heavier stroke to stay legible.
+                    .fontWeight(value == "?" ? .heavy : nil)
             }
             .font(.headline)
         }

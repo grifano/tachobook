@@ -40,13 +40,6 @@ public struct GaugeProgressView: View {
                     .font(.largeTitle)
                     .tracking(0.4)
                     .frame(height: 41)
-                if let warning {
-                    Label(warning, systemImage: "exclamationmark.circle")
-                        .labelStyle(TightLabelStyle())
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color.tachoRed)
-                        .accessibilityIdentifier("dutyWarning")
-                }
             }
             .monospacedDigit()
             .lineLimit(1)
@@ -54,6 +47,20 @@ public struct GaugeProgressView: View {
             .foregroundStyle(Color.tachoDark)
             .frame(width: 96)
             .padding(.top, 51)
+
+            // Below the value across the gauge's full width, so it is never clipped by the
+            // 96 pt centre at large text sizes.
+            if let warning {
+                Label(warning, systemImage: "exclamationmark.circle")
+                    .labelStyle(TightLabelStyle())
+                    .font(.footnote.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(TachoTheme.warningText)
+                    .fixedSize()
+                    .frame(width: 169)
+                    .padding(.top, 115)
+                    .accessibilityIdentifier("dutyWarning")
+            }
         }
         .frame(width: 169, height: 161)
         .accessibilityElement(children: .combine)

@@ -25,9 +25,16 @@ public enum TachoTheme {
     public static let gaugeTrack = Color(red: 209/255, green: 209/255, blue: 214/255)       // #D1D1D6
     public static let rule = Color(red: 120/255, green: 120/255, blue: 120/255)             // #787878
     public static let controlFill = Color(red: 120/255, green: 120/255, blue: 120/255).opacity(0.4)
-    public static let dimmedLabel = Color(red: 191/255, green: 191/255, blue: 191/255)      // #BFBFBF
     public static let doneFill = Color(red: 163/255, green: 208/255, blue: 179/255)         // #A3D0B3
-    public static let doneLabel = Color(red: 45/255, green: 92/255, blue: 64/255)           // #2D5C40
+
+    // Text and filled-button colours darkened from Figma (#116B93, #E8652A, #DE635A, #2D5C40,
+    // #BFBFBF on 40 % gray) so the XCTest accessibility audit's contrast check passes.
+    public static let blueText = Color(red: 8/255, green: 63/255, blue: 88/255)             // #083F58
+    public static let orangeStrong = Color(red: 196/255, green: 82/255, blue: 29/255)       // #C4521D
+    public static let warningText = Color(red: 163/255, green: 50/255, blue: 43/255)        // #A3322B
+    public static let doneLabel = Color(red: 31/255, green: 74/255, blue: 49/255)           // #1F4A31
+    public static let dimmedFill = Color(white: 0.86)
+    public static let dimmedLabel = Color(red: 79/255, green: 79/255, blue: 79/255)         // #4F4F4F
     public static let sheetSubtitle = Color(red: 114/255, green: 114/255, blue: 114/255)    // #727272
     public static let sheetCloseFill = Color(red: 116/255, green: 116/255, blue: 128/255).opacity(0.08)
     public static let iconCircleFill = Color(red: 228/255, green: 228/255, blue: 228/255).opacity(0.3)

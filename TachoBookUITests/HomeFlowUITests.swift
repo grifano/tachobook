@@ -26,7 +26,7 @@ final class HomeFlowUITests: XCTestCase {
         XCTAssertTrue(endOfDay.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Work Time"].exists)
         XCTAssertTrue(element(app, startingWith: "13h limit end").exists)
-        XCTAssertFalse(app.buttons["restSegment"].isEnabled, "Rest tab is inactive while working")
+        XCTAssertFalse(app.segmentedControls["homeTabPicker"].buttons["Rest"].isEnabled, "Rest tab is inactive while working")
         attach("03 shift started")
 
         // 05 → 06: close the shift, the driving reminder appears; Later keeps driving empty.
@@ -45,11 +45,11 @@ final class HomeFlowUITests: XCTestCase {
         attach("08 daily rest")
 
         // 09: the toggle switches the view only.
-        app.buttons["workSegment"].tap()
+        app.segmentedControls["homeTabPicker"].buttons["Work"].tap()
         XCTAssertTrue(element(app, startingWith: "End at").waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["endOfDayButton"].exists)
         attach("09 rest, Work tab")
-        app.buttons["restSegment"].tap()
+        app.segmentedControls["homeTabPicker"].buttons["Rest"].tap()
         XCTAssertTrue(app.staticTexts["Rest Time"].waitForExistence(timeout: 5))
 
         // 07: Driving in the summary opens the keypad.
@@ -124,33 +124,52 @@ final class HomeFlowUITests: XCTestCase {
     }
 
     @MainActor
-    func testAccessibilityAuditOfRestAndWorkStatesExceptContrast() throws {
-        let app = launch(reset: true)
+    func testAccessibilityAuditOfHomeStates() throws {
+        continueAfterFailure = true // report every state's findings in one run
+        var app = launch(reset: true)
         XCTAssertTrue(app.buttons["startOfDayButton"].waitForExistence(timeout: 5))
-        try audit(app)
+        try audit(app, "rest finished")
         app.buttons["startOfDayButton"].tap()
         confirmSheet(app, nil)
         XCTAssertTrue(app.buttons["endOfDayButton"].waitForExistence(timeout: 5))
-        try audit(app)
+        try audit(app, "work")
         app.buttons["endOfDayButton"].tap()
         confirmSheet(app, nil)
         app.alerts["Shift closed"].buttons["Later"].tap()
+        XCTAssertTrue(app.alerts.firstMatch.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Rest Time"].waitForExistence(timeout: 5))
-        try audit(app)
+        // Audit a fresh launch so nodes left over from the dismissed sheet and alert are not measured.
+        app.terminate()
+        app = launch(reset: false)
+        XCTAssertTrue(app.staticTexts["Rest Time"].waitForExistence(timeout: 5))
+        try audit(app, "daily rest")
+        app.segmentedControls["homeTabPicker"].buttons["Work"].tap()
+        XCTAssertTrue(element(app, startingWith: "End at").waitForExistence(timeout: 5))
+        try audit(app, "rest, Work tab")
+        app.terminate()
+
+        // Frame 04: the red remaining time.
+        let nearLimit = XCUIApplication()
+        nearLimit.launchArguments = ["-homeFlowUITest", "-resetHomeFlowTest", "-seedNearDutyLimit",
+                                     "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+        nearLimit.launch()
+        XCTAssertTrue(nearLimit.buttons["endOfDayButton"].waitForExistence(timeout: 5))
+        try audit(nearLimit, "near limit")
     }
 
     // MARK: - Helpers
 
-    /// Every audit category must pass except contrast. Contrast findings come from Figma
-    /// colours over the translucent widgets and the photo (for example #116B93 captions,
-    /// the 25 %/50 % week strip); they are logged as "CONTRAST" and await a design decision.
+    /// Every audit category must pass, contrast included. Issues are collected per state
+    /// and reported together so one run shows all of them.
     @MainActor
-    private func audit(_ app: XCUIApplication) throws {
+    private func audit(_ app: XCUIApplication, _ state: String) throws {
+        var issues: [String] = []
         try app.performAccessibilityAudit { issue in
-            let isContrast = issue.auditType == .contrast
-            print("\(isContrast ? "CONTRAST" : "AUDIT") | \(issue.compactDescription) | \(issue.element?.label ?? "-")")
-            return isContrast
+            issues.append("\(issue.compactDescription): \(issue.element?.label ?? "unnamed node")")
+            return true
         }
+        print("AUDIT \(state): \(issues.isEmpty ? "clean" : issues.joined(separator: "; "))")
+        XCTAssertTrue(issues.isEmpty, "\(state): \(issues.joined(separator: "; "))")
     }
 
     @MainActor
