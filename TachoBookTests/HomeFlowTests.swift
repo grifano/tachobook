@@ -132,6 +132,83 @@ struct HomeFlowTests {
         #expect(HomeTimeline.clockDuration(seconds: 98_340) == "27:19")
     }
 
+    // MARK: - Header (review round 2)
+
+    @Test func headerShowsTheDateWithoutTime() {
+        var british = calendar
+        british.locale = Locale(identifier: "en_GB")
+        #expect(HomeTimeline.headerDate(date(18, 14, 52), calendar: british) == "18 October 2026")
+    }
+
+    @Test func todayInTheWeekStripMovesAtLocalMidnight() throws {
+        let beforeMidnight = date(18, 23, 59).addingTimeInterval(59)
+        let afterMidnight = date(19, 0, 0)
+        let before = HomeTimeline.weekStrip(around: beforeMidnight, calendar: calendar)
+        let after = HomeTimeline.weekStrip(around: afterMidnight, calendar: calendar)
+        #expect(before.map(\.offset) == [-2, -1, 0, 1, 2])
+        #expect(before.filter(\.isToday).map(\.date) == [date(18, 0, 0)])
+        #expect(after.filter(\.isToday).map(\.date) == [date(19, 0, 0)])
+        #expect(before.first?.date == date(16, 0, 0))
+        #expect(after.last?.date == date(21, 0, 0))
+    }
+
+    // MARK: - Daily rest shown as weekly from 11 h (review round 3)
+
+    @Test func dailyRestIsShownAsWeeklyFromElevenHours() {
+        let restStart = date(19, 22, 25)
+        let justBefore = restStart.addingTimeInterval(11 * 3600 - 1)
+        let atEleven = restStart.addingTimeInterval(11 * 3600)
+        #expect(HomeTimeline.displayedRestKind(stored: .daily, restStart: restStart, now: justBefore) == .daily)
+        #expect(HomeTimeline.displayedRestKind(stored: .daily, restStart: restStart, now: atEleven) == .weekly)
+        #expect(HomeTimeline.displayedRestKind(stored: .weekly, restStart: restStart, now: restStart) == .weekly)
+    }
+
+    @Test func closedAtTwentyTwoTwentyFiveSwitchesCardsAtNineTwentyFive() throws {
+        let model = seeded()
+        model.startShift(at: date(19, 5, 40), now: date(19, 5, 40))
+        model.closeShift(at: date(19, 22, 25), now: date(19, 22, 30))
+        let restStart = try #require(model.currentRestStart)
+
+        let at0924 = date(20, 9, 24)
+        let daily = HomeTimeline.displayedRestKind(stored: model.restKind, restStart: restStart, now: at0924)
+        #expect(daily == .daily)
+        let dailyMilestones = HomeTimeline.restMilestones(restStart: restStart, kind: daily)
+        #expect(label(dailyMilestones.first, now: at0924) == "07:25")
+        #expect(label(dailyMilestones.second, now: at0924) == "09:25")
+
+        let at0925 = date(20, 9, 25)
+        let weekly = HomeTimeline.displayedRestKind(stored: model.restKind, restStart: restStart, now: at0925)
+        #expect(weekly == .weekly)
+        #expect(weekly.requiredHours == 45)
+        let weeklyMilestones = HomeTimeline.restMilestones(restStart: restStart, kind: weekly)
+        #expect(label(weeklyMilestones.first, now: at0925) == "22:25")
+        #expect(label(weeklyMilestones.second, now: at0925) == "19:25 We")
+
+        // The stored kind stays daily: Start of day is available from 9 h and after the switch.
+        #expect(model.restKind == .daily)
+        #expect(HomeTimeline.availabilityCountdown(restStart: restStart, kind: model.restKind, now: date(20, 7, 24)) != nil)
+        for now in [date(20, 7, 25), at0925, date(21, 12, 0)] {
+            #expect(HomeTimeline.availabilityCountdown(restStart: restStart, kind: model.restKind, now: now) == nil)
+            #expect(model.canStartShift(at: now, now: now))
+        }
+    }
+
+    @Test func displayedKindIsDerivedAfterRelaunch() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "home-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appending(path: "shifts.store")
+        autoreleasepool {
+            let model = DayLogModel(storageURL: url)
+            model.setDayStart(date(19, 5, 40))
+            model.closeShift(at: date(19, 22, 25), now: date(19, 22, 30))
+        }
+        let reloaded = DayLogModel(storageURL: url)
+        let restStart = try #require(reloaded.currentRestStart)
+        #expect(reloaded.restKind == .daily)
+        #expect(HomeTimeline.displayedRestKind(stored: reloaded.restKind, restStart: restStart, now: date(20, 9, 24)) == .daily)
+        #expect(HomeTimeline.displayedRestKind(stored: reloaded.restKind, restStart: restStart, now: date(20, 9, 25)) == .weekly)
+    }
+
     // MARK: - Editing the summary (R-E01)
 
     @Test func editingDayStartedMovesMarkersAndKeepsThePreviousRestLinked() throws {

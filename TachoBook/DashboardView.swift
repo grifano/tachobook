@@ -162,7 +162,8 @@ public struct DashboardView: View {
     @ViewBuilder
     private func restWidget(now: Date) -> some View {
         if let restStart = model.currentRestStart {
-            let kind = model.restKind
+            // The card follows the displayed kind (a daily rest past 11 h shows as weekly).
+            let kind = HomeTimeline.displayedRestKind(stored: model.restKind, restStart: restStart, now: now)
             let elapsed = HomeTimeline.elapsedSeconds(from: restStart, to: now)
             let milestones = HomeTimeline.restMilestones(restStart: restStart, kind: kind)
             HomeMainWidget(
@@ -241,7 +242,7 @@ public struct DashboardView: View {
                             identifier: "summaryDayClosed") { sheet = .editDayEnd },
         ]
         return HomeSecondaryCard(symbol: "info.circle.fill",
-                                 title: model.restKind == .weekly ? "Last Shift Summary" : "Today’s summary",
+                                 title: displayedRestKind(now: now) == .weekly ? "Last Shift Summary" : "Today’s summary",
                                  count: items.count) { index in
             let item = items[index]
             Button(action: item.action) {
@@ -253,6 +254,12 @@ public struct DashboardView: View {
             .accessibilityIdentifier(item.identifier)
             .accessibilityHint("Edit")
         }
+    }
+
+    /// The rest kind Home shows; Start of day keeps using the stored kind's milestone.
+    private func displayedRestKind(now: Date) -> RestKind {
+        guard let restStart = model.currentRestStart else { return model.restKind }
+        return HomeTimeline.displayedRestKind(stored: model.restKind, restStart: restStart, now: now)
     }
 
     // MARK: - Sheets

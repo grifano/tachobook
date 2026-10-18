@@ -65,6 +65,30 @@ Both icons now sit in a fixed 40 × 40 slot; the bed keeps its aspect ratio, cen
 
 ![Work and Rest at 402 and 390 pt](toggle-work-rest.jpg)
 
+## Header: date only, today highlighted (review round 2, 18.10.2026)
+
+- Subtitle shows the date only ("18 October 2026"); the time was removed (Serhii's decision).
+- Today in the week strip has the Figma circle (`Week Day` BG: 44 pt, #E4E4E4 at 30 % inside a 44 % layer).
+  Today is the device-local calendar date and moves at midnight without relaunch
+  (`HomeFlowTests.todayInTheWeekStripMovesAtLocalMidnight`, injected clock 23:59:59 → 00:00:00).
+- VoiceOver reads "Today, <full date>" with the selected trait; the neighbouring days stay hidden.
+  The strict accessibility audit still passes in all five Home states.
+
+![Header next to Figma frame 01 at 402 and 390 pt](header-vs-figma.jpg)
+
+## Daily rest shown as weekly from 11 h (review round 3, 18.10.2026)
+
+Option B (Serhii's decision): a rest started by closing a shift is stored as daily and shown with the
+daily card until 11 h of elapsed rest (39 600 s, exact timestamps). From 11 h Home shows the weekly card
+(Weekly Rest, 45h gauge, After 24h / After 45h = rest start + 24 h / + 45 h) and "Last Shift Summary".
+Derived from timestamps on every tick, so it switches live and after relaunch; the stored kind is not
+rewritten. Start of day keeps the daily 9 h milestone, so it stays enabled after the switch. Seeded weekly
+rests are weekly from the start. Tests: `dailyRestIsShownAsWeeklyFromElevenHours` (10:59:59 vs 11:00:00),
+`closedAtTwentyTwoTwentyFiveSwitchesCardsAtNineTwentyFive`, `displayedKindIsDerivedAfterRelaunch`, and the UI
+test `testDailyRestTurnsWeeklyAtElevenHoursAndHeaderShowsToday` (live switch, button state, relaunch).
+
+![Daily card just before and weekly card just after 11 h at 402 and 390 pt](rest-11h.jpg)
+
 ## Known visual differences
 
 - Native sheets dim Home behind them; Figma shows no dimming.

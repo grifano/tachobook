@@ -90,6 +90,11 @@ public final class DayLogModel {
                                             restStart: restStart, drivingMinutes: 128)
             } else if args.contains("-seedNearDutyLimit"), model.isEmpty {
                 model.setDayStart(Date().addingTimeInterval(-(14 * 3600 + 45 * 60)))
+            } else if args.contains("-seedDailyRestNearEleven"), model.isEmpty {
+                // A daily rest 20 s short of 11 h, to watch it switch to the weekly card.
+                let now = Date()
+                model.setDayStart(now.addingTimeInterval(-24 * 3600))
+                model.closeShift(at: now.addingTimeInterval(-(11 * 3600 - 20)))
             }
             return model
         }

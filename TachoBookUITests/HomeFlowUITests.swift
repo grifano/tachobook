@@ -92,6 +92,41 @@ final class HomeFlowUITests: XCTestCase {
         app.buttons["closeSheetButton"].tap()
     }
 
+    /// Review round 3: a daily rest switches to the weekly card at 11 h, live, and Start of day stays enabled.
+    /// Review round 2: the header shows the date only and today is exposed to VoiceOver.
+    @MainActor
+    func testDailyRestTurnsWeeklyAtElevenHoursAndHeaderShowsToday() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-homeFlowUITest", "-resetHomeFlowTest", "-seedDailyRestNearEleven",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Rest Time"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element(app, startingWith: "After 9h rest").exists)
+        XCTAssertTrue(app.buttons["startOfDayButton"].isEnabled)
+
+        let header = app.staticTexts["headerDate"]
+        XCTAssertTrue(header.exists)
+        XCTAssertNil(header.label.range(of: #"\d{1,2}:\d{2}"#, options: .regularExpression), "header shows a time: \(header.label)")
+        let today = app.descendants(matching: .any)["weekStripToday"]
+        XCTAssertTrue(today.exists)
+        XCTAssertTrue(today.label.hasPrefix("Today"), today.label)
+        XCTAssertTrue(today.isSelected)
+        attach("Daily card before 11 h")
+
+        XCTAssertTrue(app.staticTexts["Weekly Rest"].waitForExistence(timeout: 40))
+        XCTAssertTrue(element(app, startingWith: "After 24h rest").exists)
+        XCTAssertTrue(element(app, startingWith: "After 45h rest").exists)
+        XCTAssertTrue(app.staticTexts["Last Shift Summary"].exists)
+        XCTAssertTrue(app.buttons["startOfDayButton"].isEnabled)
+        attach("Weekly card from 11 h")
+
+        app.terminate()
+        app.launchArguments = ["-homeFlowUITest", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Weekly Rest"].waitForExistence(timeout: 5), "same card after relaunch")
+        XCTAssertTrue(app.buttons["startOfDayButton"].isEnabled)
+    }
+
     /// Switching Work ↔ Rest must not move the widget, the button row or the summary card.
     @MainActor
     func testToggleDoesNotShiftLayout() {

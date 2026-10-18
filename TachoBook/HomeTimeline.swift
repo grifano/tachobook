@@ -52,6 +52,16 @@ public enum HomeTimeline {
         TimeInterval(dutyRemainingSeconds(shiftStart: shiftStart, at: instant)) <= dutyWarningThreshold
     }
 
+    /// A daily rest that continues to 11 h is shown as a weekly rest (R-W01: a daily rest can
+    /// continue into a weekly one; the type stays provisional). Display only: the stored kind and
+    /// the Start of day milestone are unchanged.
+    public static let weeklyDisplayAfter: TimeInterval = 11 * 3600
+
+    public static func displayedRestKind(stored: RestKind, restStart: Date, now: Date) -> RestKind {
+        guard stored == .daily else { return stored }
+        return now.timeIntervalSince(restStart) >= weeklyDisplayAfter ? .weekly : .daily
+    }
+
     /// Start of day countdown; nil once the milestone is reached.
     public static func availabilityCountdown(restStart: Date, kind: RestKind, now: Date) -> String? {
         let available = adding(hours: kind.requiredHours, to: restStart)
@@ -85,6 +95,31 @@ public enum HomeTimeline {
         formatter.locale = calendar.locale ?? .current
         formatter.dateFormat = "d MMM"
         return formatter.string(from: date)
+    }
+
+    /// Header subtitle: the date only, "18 October 2026".
+    public static func headerDate(_ now: Date, calendar: Calendar = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = calendar.locale ?? .current
+        formatter.setLocalizedDateFormatFromTemplate("dMMMMyyyy")
+        return formatter.string(from: now)
+    }
+
+    public struct WeekStripDay: Equatable {
+        public var date: Date
+        /// Days from today: -2 … 2.
+        public var offset: Int
+        public var isToday: Bool { offset == 0 }
+    }
+
+    /// Five days centred on today in the device calendar; today moves at local midnight.
+    public static func weekStrip(around now: Date, calendar: Calendar = .current) -> [WeekStripDay] {
+        let today = calendar.startOfDay(for: now)
+        return (-2...2).compactMap { offset in
+            calendar.date(byAdding: .day, value: offset, to: today).map { WeekStripDay(date: $0, offset: offset) }
+        }
     }
 
     /// "09h52m"; "?" while the driver has not entered driving time.
