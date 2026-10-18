@@ -5,379 +5,299 @@
 
 import SwiftUI
 
-public enum ActiveFlowSheet: Identifiable {
-    case dayStart
-    case driving
-    case dayEnd
-    case daySummary
-
-    public var id: Int {
-        hashValue
-    }
-}
-
+/// Home from Figma "Flow 1 - Log Day Shift". Every displayed value is derived
+/// from persisted timestamps and the current time.
 public struct DashboardView: View {
+    enum HomeSheet: String, Identifiable {
+        case startShift
+        case closeShift
+        case editDayStart
+        case editDayEnd
+        case driving
+
+        var id: String { rawValue }
+    }
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State public var model: DayLogModel
-    @State private var activeSheet: ActiveFlowSheet? = nil
-    @State private var confirmNewShift = false
-    @State private var confirmCloseShift = false
+    @State private var sheet: HomeSheet?
+    @State private var tabOverride: HomeTab?
+    @State private var showDrivingAlert = false
+    @State private var drivingAlertPending = false
 
     public init(model: DayLogModel = DayLogModel.dashboardModel()) {
         self._model = State(initialValue: model)
     }
 
+    /// The default tab follows the shift state; the toggle only overrides the view.
+    private var tab: Binding<HomeTab> {
+        let defaultTab: HomeTab = model.isResting ? .rest : .work
+        return Binding(
+            get: { tabOverride ?? defaultTab },
+            set: { tabOverride = $0 == defaultTab ? nil : $0 }
+        )
+    }
+
     public var body: some View {
-        ZStack {
-            // Main Content
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let now = context.date
             VStack(spacing: 0) {
-                // Header
-                DashboardHeaderView(date: model.selectedDate)
-                    .padding(.top, 8)
-
-                // Scrollable Dashboard Area
-                ScrollView(showsIndicators: false) {
+                DashboardHeaderView(date: now)
+                ScrollView {
                     VStack(spacing: 20) {
-                        // 1. Today's Limits Card
-                        limitsCard
-                        if model.isResting { restControls }
-
+                        content(now: now)
                         if let error = model.storageError {
-                            Text(error).foregroundStyle(.white)
+                            Text(error).font(.footnote).foregroundStyle(.white)
                         }
-
-                        // 2. Day Log Card
-                        dayLogCard
-
-                        // 3. Action Button (Close day / Day summary)
-                        actionButton
                     }
                     .padding(.horizontal, 16)
-                    .padding(.top, 16)
+                    .padding(.top, 2)
                     .padding(.bottom, 16)
                 }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    DashboardTabBarView()
-                        .padding(.bottom, 8)
-                }
-            }
-
-            // Dimming Overlay and Modal Presentation
-            if let sheet = activeSheet {
-                Color.black.opacity(0.35)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            activeSheet = nil
-                        }
-                    }
-
-                VStack {
-                    Spacer()
-                    switch sheet {
-                    case .dayStart:
-                        DayStartSheet(
-                            selectedDate: Binding(
-                                get: {
-                                    model.dayStart ?? (ProcessInfo.processInfo.arguments.contains("-sampleData") ? DayLogModel.defaultReferenceDate() : Date())
-                                },
-                                set: { _ in }
-                            ),
-                            onConfirm: { date in
-                                model.setDayStart(date)
-                                withAnimation { activeSheet = nil }
-                            },
-                            onCancel: {
-                                withAnimation { activeSheet = nil }
-                            }
-                        )
-                        .transition(.move(edge: .bottom))
-
-                    case .driving:
-                        DailyDrivingSheet(
-                            initialMinutes: model.drivingMinutes ?? 570,
-                            onConfirm: { minutes in
-                                model.setDrivingMinutes(minutes)
-                                withAnimation { activeSheet = nil }
-                            },
-                            onCancel: {
-                                withAnimation { activeSheet = nil }
-                            }
-                        )
-                        .transition(.move(edge: .bottom))
-
-                    case .dayEnd:
-                        DayEndSheet(
-                            selectedDate: Binding(
-                                get: {
-                                    model.dayEnd ?? (ProcessInfo.processInfo.arguments.contains("-sampleData") ? DayLogModel.defaultDayEndReferenceDate() : Date())
-                                },
-                                set: { _ in }
-                            ),
-                            onConfirm: { date in
-                                model.setDayEnd(date)
-                                withAnimation { activeSheet = nil }
-                            },
-                            onCancel: {
-                                withAnimation { activeSheet = nil }
-                            }
-                        )
-                        .transition(.move(edge: .bottom))
-
-                    case .daySummary:
-                        DaySummaryView(
-                            model: model,
-                            onClose: {
-                                model.closeDay()
-                                withAnimation { activeSheet = nil }
-                            },
-                            onEdit: { type in
-                                withAnimation {
-                                    switch type {
-                                    case .dayStart: activeSheet = .dayStart
-                                    case .driving: activeSheet = .driving
-                                    case .dayEnd: activeSheet = .dayEnd
-                                    }
-                                }
-                            },
-                            onDelete: { type in
-                                model.deleteEntry(type)
-                            }
-                        )
-                        .transition(.move(edge: .bottom))
-                    }
-                }
-                .ignoresSafeArea(edges: .bottom)
+                .scrollIndicators(.hidden)
             }
         }
-        .confirmationDialog("Close shift and start rest?", isPresented: $confirmCloseShift, titleVisibility: .visible) {
-            Button("Close shift") {
-                model.closeShift(at: model.dayEnd ?? Date())
-            }
-        } message: {
-            Text(model.drivingMinutes == nil ? "Did you remember to enter today's total driving time? You can add it later in Day summary." : "Rest starts from the logged end time. You can resume this duty period after a short rest.")
-        }
-        .confirmationDialog("Start a new duty period?", isPresented: $confirmNewShift, titleVisibility: .visible) {
-            Button("Daily rest confirmed — start new shift") {
-                model.startNewShift(at: Date(), dailyRestConfirmed: true)
-            }
-        } message: {
-            Text("Confirm that this uninterrupted rest satisfies your daily-rest requirement. Duration alone does not establish eligibility; reduction counts, split rest and exceptions are not evaluated here.")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            DashboardTabBarView()
+                .padding(.bottom, 8)
         }
         .background {
-            ZStack {
-                Color.tachoDark
-                GeometryReader { geo in
-                    Image("DashboardBackground")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .clipped()
-                }
-            }
-            .ignoresSafeArea()
+            Image("DashboardBackground")
+                .resizable()
+                .scaledToFill()
+                .overlay(Color.black.opacity(0.2))
+                .ignoresSafeArea()
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: activeSheet)
-    }
-
-    // MARK: - Subviews
-
-    private var limitsCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Today’s Limits")
-                .font(.system(.footnote, weight: .semibold))
-                .foregroundColor(.tachoDark)
-
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                HStack(spacing: 32) {
-                    GaugeProgressView(
-                        title: "Shift elapsed",
-                        value: model.shiftDurationString(at: context.date),
-                        progress: min(1, Double(model.shiftElapsedSeconds(at: context.date) ?? 0) / (15 * 3600)),
-                        secondaryValue: model.isShiftOpen ? model.shiftSecondsString(at: context.date) : nil
-                    )
-                    GaugeProgressView(
-                        title: "Rest Time",
-                        value: DayLogModel.durationString(seconds: model.restElapsedSeconds(at: context.date)),
-                        progress: min(1, Double(model.restElapsedSeconds(at: context.date)) / (11 * 3600)),
-                        progressColor: .tachoTrackGray
-                    )
-                }
-            }
-            .frame(maxWidth: .infinity)
+        .onChange(of: model.isResting) { tabOverride = nil }
+        .sheet(item: $sheet, onDismiss: presentPendingDrivingAlert) { sheet in
+            sheetContent(sheet)
         }
-        .padding(16)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: TachoTheme.cardRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: TachoTheme.cardRadius)
-                .stroke(Color.tachoCardBorder, lineWidth: 2)
-        )
-    }
-
-    private var dayLogCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Day log")
-                .font(.system(.footnote, weight: .semibold))
-                .foregroundColor(.tachoDark)
-
-            VStack(spacing: 8) {
-                // Row 1: Day start
-                logRow(
-                    isLogged: model.dayStart != nil,
-                    title: "Day start",
-                    value: model.dayStartDisplayString,
-                    identifier: "editDayStartButton",
-                    isEditable: model.restSegments.isEmpty,
-                    onEdit: { activeSheet = .dayStart }
-                )
-
-                Divider()
-                    .background(Color.tachoSeparator)
-
-                // Row 2: Driving log
-                logRow(
-                    isLogged: model.drivingMinutes != nil,
-                    title: "Driving log",
-                    value: model.drivingMinutes != nil ? model.drivingDisplayString : "-",
-                    identifier: "editDrivingButton",
-                    onEdit: { activeSheet = .driving }
-                )
-
-                Divider()
-                    .background(Color.tachoSeparator)
-
-                // Row 3: Day end
-                logRow(
-                    isLogged: model.dayEnd != nil,
-                    title: "Day end",
-                    value: model.dayEndDisplayString,
-                    identifier: "editDayEndButton",
-                    onEdit: { activeSheet = .dayEnd }
-                )
-            }
-        }
-        .padding(16)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: TachoTheme.cardRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: TachoTheme.cardRadius)
-                .stroke(Color.tachoCardBorder, lineWidth: 2)
-        )
-    }
-
-    private func logRow(
-        isLogged: Bool,
-        title: String,
-        value: String,
-        identifier: String = "",
-        isEditable: Bool = true,
-        onEdit: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 8) {
-            // Leading status & title
-            HStack(spacing: 8) {
-                if isLogged {
-                    ZStack {
-                        Circle()
-                            .fill(Color.tachoGreen)
-                            .frame(width: 22, height: 22)
-                        Image(systemName: "checkmark")
-                            .font(.system(.caption, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                }
-
-                Text(title)
-                    .font(.system(.title3, weight: .semibold))
-                    .foregroundColor(.tachoDark)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            // Trailing actions
-            HStack(spacing: 12) {
-                Text(value)
-                    .font(.system(.title3, weight: .semibold))
-                    .foregroundColor(isLogged ? .tachoDark : .tachoSecondary)
-                    .lineLimit(1)
-
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.tachoOrange)
-                        .frame(width: 50, height: 50)
-                        .background(Color.tachoGray)
-                        .clipShape(Circle())
-                }
-                .accessibilityIdentifier(identifier)
-                .disabled(!isEditable)
-            }
-        }
-        .frame(minHeight: 52)
-    }
-
-    private var restControls: some View {
-        VStack(spacing: 12) {
-            Text("Rest in progress · eligibility not evaluated")
-                .font(.caption).foregroundStyle(Color.tachoDark)
-            if let nine = model.restMilestone(hours: 9), let eleven = model.restMilestone(hours: 11) {
-                Text("9h: \(nine.formatted(date: .abbreviated, time: .shortened)) · 11h: \(eleven.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.caption).foregroundStyle(Color.tachoDark)
-            }
-            Button("Resume shift") { model.resumeShift(at: Date()) }
-                .buttonStyle(.borderedProminent).tint(.tachoOrange)
-                .accessibilityIdentifier("resumeShiftButton")
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                if model.restElapsedSeconds(at: context.date) >= 9 * 3600 {
-                    Button("Start new shift…") { confirmNewShift = true }
-                        .buttonStyle(.bordered).tint(.tachoOrange)
-                        .accessibilityIdentifier("newShiftButton")
-                }
-            }
-            Text("Records continuation of the same shift. Rest qualification requires review.")
-                .font(.caption).foregroundStyle(Color.tachoDark)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: TachoTheme.cardRadius))
-    }
-
-
-    private var actionButton: some View {
-        Group {
-            if model.isDayClosed {
-
-                // Completed day: "Day summary" button reopens summary
-                Button(action: {
-                    activeSheet = .daySummary
-                }) {
-                    Text("Day summary")
-                        .font(.body)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.tachoOrange)
-                        .clipShape(Capsule())
-                }
-                .accessibilityIdentifier("daySummaryButton")
-            } else {
-                // Not completed yet: "Close day" button
-                Button(action: {
-                    confirmCloseShift = true
-                }) {
-                    Text("Close day")
-                        .font(.body)
-                        .foregroundColor(model.isShiftOpen ? .white : Color(red: 60/255, green: 60/255, blue: 67/255).opacity(0.6))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(model.isShiftOpen ? Color.tachoOrange : Color.tachoGray)
-                        .clipShape(Capsule())
-                }
-                .accessibilityIdentifier("closeDayButton")
-                .disabled(!model.isShiftOpen || model.storageError != nil)
-            }
+        .alert("Shift closed", isPresented: $showDrivingAlert) {
+            Button("Later", role: .cancel) {}
+            Button("Add time") { sheet = .driving }
+                .keyboardShortcut(.defaultAction)
+        } message: {
+            Text("Add your total driving time for this shift.")
         }
     }
+
+    // MARK: - States
+
+    @ViewBuilder
+    private func content(now: Date) -> some View {
+        if model.isResting, tab.wrappedValue == .rest {
+            // Frames 01, 06, 08: rest running.
+            restWidget(now: now)
+            startOfDayButton(now: now)
+            summaryCard(now: now)
+        } else if model.isResting {
+            // Frame 09: Work tab while resting shows the frozen shift.
+            workWidget(now: now)
+            chipRow {
+                startChip(now: now)
+                doneChip(title: "End at", date: model.dayEnd, now: now)
+            }
+            summaryCard(now: now)
+        } else if model.isShiftOpen {
+            // Frames 03, 04: shift running.
+            workWidget(now: now)
+            chipRow {
+                startChip(now: now)
+                Button { sheet = .closeShift } label: {
+                    HomeCapsuleLabel(symbol: "stop.circle", title: "End of day", style: .primary)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.storageError != nil)
+                .accessibilityIdentifier("endOfDayButton")
+            }
+            nextRestCard(now: now)
+        } else {
+            // No shift recorded yet.
+            workWidget(now: now)
+            startOfDayButton(now: now)
+        }
+    }
+
+    /// Two capsules side by side as in Figma, stacked at accessibility text sizes.
+    private var chipRow: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 20)) : AnyLayout(HStackLayout(spacing: 20))
+    }
+
+    private func workWidget(now: Date) -> some View {
+        let start = model.dayStart
+        let elapsed = model.shiftElapsedSeconds(at: now) ?? 0
+        // A frozen shift is judged at its close time, a running one at now.
+        let instant = model.currentRestStart ?? now
+        let markers = start.map { HomeTimeline.dutyMarkers(shiftStart: $0) }
+        let warning = start.flatMap { start in
+            HomeTimeline.isDutyWarning(shiftStart: start, at: instant)
+                ? HomeTimeline.remainingDuration(seconds: HomeTimeline.dutyRemainingSeconds(shiftStart: start, at: instant))
+                : nil
+        }
+        let subtitle = start.map {
+            "\(HomeTimeline.dayLabel($0, relativeTo: now)) · Started \(HomeTimeline.clockLabel($0, relativeTo: $0))"
+        } ?? "Today"
+        return HomeMainWidget(
+            icon: "HomeWorkIcon", iconSize: CGSize(width: 40, height: 40),
+            title: "Work Time", subtitle: subtitle, accent: .tachoDark,
+            tab: tab, isRestEnabled: model.isResting,
+            gauge: GaugeProgressView(
+                limit: "\(HomeTimeline.dutyMarkerHours.second)h",
+                value: HomeTimeline.clockDuration(seconds: elapsed),
+                progress: Double(elapsed) / (Double(HomeTimeline.dutyMarkerHours.second) * 3600),
+                tint: .tachoOrange, warning: warning),
+            limits: [
+                HomeLimit(label: "\(HomeTimeline.dutyMarkerHours.first)h limit end",
+                          value: markers.map { HomeTimeline.clockLabel($0.first, relativeTo: now) } ?? "--:--"),
+                HomeLimit(label: "\(HomeTimeline.dutyMarkerHours.second)h limit end",
+                          value: markers.map { HomeTimeline.clockLabel($0.second, relativeTo: now) } ?? "--:--"),
+            ])
+    }
+
+    @ViewBuilder
+    private func restWidget(now: Date) -> some View {
+        if let restStart = model.currentRestStart {
+            let kind = model.restKind
+            let elapsed = HomeTimeline.elapsedSeconds(from: restStart, to: now)
+            let milestones = HomeTimeline.restMilestones(restStart: restStart, kind: kind)
+            HomeMainWidget(
+                icon: "HomeRestIcon", iconSize: CGSize(width: 40, height: 27),
+                title: kind == .weekly ? "Weekly Rest" : "Rest Time",
+                subtitle: "Closed \(HomeTimeline.dateLabel(restStart)) · \(HomeTimeline.clockLabel(restStart, relativeTo: restStart))",
+                accent: .tachoBlue, tab: tab, isRestEnabled: true,
+                gauge: GaugeProgressView(
+                    limit: "\(kind.requiredHours)h",
+                    value: HomeTimeline.clockDuration(seconds: elapsed),
+                    progress: Double(elapsed) / (Double(kind.requiredHours) * 3600),
+                    tint: .tachoBlue),
+                limits: [
+                    HomeLimit(label: "After \(kind.milestoneHours.first)h rest",
+                              value: HomeTimeline.clockLabel(milestones.first, relativeTo: now)),
+                    HomeLimit(label: "After \(kind.milestoneHours.second)h rest",
+                              value: HomeTimeline.clockLabel(milestones.second, relativeTo: now)),
+                ])
+        }
+    }
+
+    private func startOfDayButton(now: Date) -> some View {
+        let countdown = model.currentRestStart.flatMap {
+            HomeTimeline.availabilityCountdown(restStart: $0, kind: model.restKind, now: now)
+        }
+        let isAvailable = countdown == nil && model.storageError == nil
+        return Button { sheet = .startShift } label: {
+            HomeCapsuleLabel(symbol: "play.circle", title: "Start of day",
+                             subtitle: countdown.map { "Available in \($0)" },
+                             style: isAvailable ? .primary : .dimmed,
+                             titleFont: .headline, subtitleFont: .footnote)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isAvailable)
+        .accessibilityIdentifier("startOfDayButton")
+    }
+
+    private func startChip(now: Date) -> some View {
+        doneChip(title: "Start at", date: model.dayStart, now: now)
+    }
+
+    /// Read-only chips: Start at, End at.
+    private func doneChip(title: String, date: Date?, now: Date) -> some View {
+        HomeCapsuleLabel(symbol: "checkmark.circle.fill", title: title,
+                         subtitle: date.map { HomeTimeline.clockLabel($0, relativeTo: now) } ?? "?",
+                         style: .done)
+            .accessibilityElement(children: .combine)
+    }
+
+    private func nextRestCard(now: Date) -> some View {
+        let milestones = HomeTimeline.restMilestones(restStart: now, kind: .daily)
+        let items = [
+            ("After \(RestKind.daily.milestoneHours.first)h rest", milestones.first),
+            ("After \(RestKind.daily.milestoneHours.second)h rest", milestones.second),
+        ]
+        return HomeSecondaryCard(symbol: "bed.double.fill", title: "Next rest after close this day",
+                                 count: items.count) { index in
+            HomeValueColumn(label: items[index].0,
+                            value: HomeTimeline.clockLabel(items[index].1, relativeTo: now),
+                            valueSymbol: "clock")
+                .accessibilityElement(children: .combine)
+        }
+    }
+
+    /// Day started, Driving and Day closed open the matching sheet to correct the value.
+    private func summaryCard(now: Date) -> some View {
+        let items = [
+            HomeSummaryItem(symbol: "play.circle", label: "Day started",
+                            value: model.dayStart.map { HomeTimeline.clockLabel($0, relativeTo: now) } ?? "?",
+                            identifier: "summaryDayStarted") { sheet = .editDayStart },
+            HomeSummaryItem(symbol: "steeringwheel", label: "Driving",
+                            value: HomeTimeline.drivingLabel(minutes: model.drivingMinutes),
+                            identifier: "summaryDriving") { sheet = .driving },
+            HomeSummaryItem(symbol: "stop.circle", label: "Day closed",
+                            value: model.dayEnd.map { HomeTimeline.clockLabel($0, relativeTo: now) } ?? "?",
+                            identifier: "summaryDayClosed") { sheet = .editDayEnd },
+        ]
+        return HomeSecondaryCard(symbol: "info.circle.fill",
+                                 title: model.restKind == .weekly ? "Last Shift Summary" : "Today’s summary",
+                                 count: items.count) { index in
+            let item = items[index]
+            Button(action: item.action) {
+                HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(model.storageError != nil)
+            .accessibilityIdentifier(item.identifier)
+            .accessibilityHint("Edit")
+        }
+    }
+
+    // MARK: - Sheets
+
+    @ViewBuilder
+    private func sheetContent(_ sheet: HomeSheet) -> some View {
+        switch sheet {
+        case .startShift:
+            TimeEntrySheet(kind: .shiftStart, initialDate: Date(),
+                           isValid: { model.canStartShift(at: $0, now: Date()) },
+                           onConfirm: { model.startShift(at: $0, now: Date()); dismissSheet() },
+                           onCancel: dismissSheet)
+        case .editDayStart:
+            TimeEntrySheet(kind: .shiftStart, initialDate: model.dayStart ?? Date(),
+                           isValid: { model.canEditDayStart($0, now: Date()) },
+                           onConfirm: { model.editDayStart($0, now: Date()); dismissSheet() },
+                           onCancel: dismissSheet)
+        case .closeShift:
+            TimeEntrySheet(kind: .restStart, initialDate: Date(),
+                           isValid: { model.canCloseShift(at: $0, now: Date()) },
+                           onConfirm: { date in
+                               model.closeShift(at: date, now: Date())
+                               drivingAlertPending = model.isResting
+                               dismissSheet()
+                           },
+                           onCancel: dismissSheet)
+        case .editDayEnd:
+            TimeEntrySheet(kind: .restStart, initialDate: model.dayEnd ?? Date(),
+                           isValid: { model.canEditDayEnd($0, now: Date()) },
+                           onConfirm: { model.editDayEnd($0, now: Date()); dismissSheet() },
+                           onCancel: dismissSheet)
+        case .driving:
+            DailyDrivingSheet(initialMinutes: model.drivingMinutes,
+                              onConfirm: { model.setDrivingMinutes($0); dismissSheet() },
+                              onCancel: dismissSheet)
+        }
+    }
+
+    private func dismissSheet() {
+        sheet = nil
+    }
+
+    /// The driving reminder follows the closed Rest start sheet (frame 06).
+    private func presentPendingDrivingAlert() {
+        guard drivingAlertPending else { return }
+        drivingAlertPending = false
+        showDrivingAlert = true
+    }
+}
+
+#Preview {
+    DashboardView(model: DayLogModel())
 }
