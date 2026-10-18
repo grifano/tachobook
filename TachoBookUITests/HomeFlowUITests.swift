@@ -92,6 +92,45 @@ final class HomeFlowUITests: XCTestCase {
         app.buttons["closeSheetButton"].tap()
     }
 
+    /// Switching Work ↔ Rest must not move the widget, the button row or the summary card.
+    @MainActor
+    func testToggleDoesNotShiftLayout() {
+        let app = launch(reset: true)
+        XCTAssertTrue(app.buttons["startOfDayButton"].waitForExistence(timeout: 5))
+        app.buttons["startOfDayButton"].tap()
+        confirmSheet(app, nil)
+        let workState = frames(app)
+        app.buttons["endOfDayButton"].tap()
+        confirmSheet(app, nil)
+        app.alerts["Shift closed"].buttons["Later"].tap()
+        XCTAssertTrue(app.alerts.firstMatch.waitForNonExistence(timeout: 5))
+
+        let picker = app.segmentedControls["homeTabPicker"]
+        XCTAssertTrue(app.staticTexts["Rest Time"].waitForExistence(timeout: 5))
+        let rest = frames(app)
+        picker.buttons["Work"].tap()
+        XCTAssertTrue(element(app, startingWith: "End at").waitForExistence(timeout: 5))
+        let work = frames(app)
+        attach("Toggle Work")
+        picker.buttons["Rest"].tap()
+        XCTAssertTrue(app.staticTexts["Rest Time"].waitForExistence(timeout: 5))
+        attach("Toggle Rest")
+        print("LAYOUT work state widget \(workState.widget), rest widget \(rest.widget) card \(rest.card), work tab widget \(work.widget) card \(work.card)")
+
+        XCTAssertEqual(rest.widget, work.widget, "Main widget moved or resized")
+        XCTAssertEqual(rest.card, work.card, "Summary card moved")
+        XCTAssertEqual(workState.widget, rest.widget, "Work and Rest widgets differ in height")
+    }
+
+    @MainActor
+    private func frames(_ app: XCUIApplication) -> (widget: CGRect, card: CGRect) {
+        let widget = app.otherElements["mainWidget"]
+        let card = app.otherElements["secondaryCard"]
+        XCTAssertTrue(widget.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.exists)
+        return (widget.frame, card.frame)
+    }
+
     @MainActor
     func testRemainingTimeTurnsRedInTheLastHour() {
         let app = XCUIApplication()

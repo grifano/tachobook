@@ -51,6 +51,20 @@ Gauge arcs, tab bar and icons keep the Figma colours (graphics, not text).
 
 Individual "before" captures: `contrast-before/`.
 
+## Work ↔ Rest without layout jump (review fix, 18.10.2026)
+
+Cause: the header icon slot followed the icon size (40 × 40 work, 40 × 27 bed), so the Rest card was
+shorter. Measured by \`HomeFlowUITests.testToggleDoesNotShiftLayout\` (accessibility frames, pt):
+
+| Width | Before: Work / Rest widget height | Before: summary card y (Work / Rest) | After: widget height (Work, Rest, work state) | After: card y |
+|---|---|---|---|---|
+| 402 pt | 249.00 / 243.67 | 541.67 / 536.33 | 249.00, 249.00, 249.00 | 541.67 in both tabs |
+| 390 pt | 249.00 / 243.67 | 526.67 / 521.33 | 249.00, 249.00, 249.00 | 526.67 in both tabs |
+
+Both icons now sit in a fixed 40 × 40 slot; the bed keeps its aspect ratio, centred. 249 pt equals the Figma widget height.
+
+![Work and Rest at 402 and 390 pt](toggle-work-rest.jpg)
+
 ## Known visual differences
 
 - Native sheets dim Home behind them; Figma shows no dimming.

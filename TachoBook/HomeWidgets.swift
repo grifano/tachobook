@@ -75,6 +75,8 @@ struct HomeMainWidget: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .homeWidgetBackground()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("mainWidget")
     }
 
     private var titleBlock: some View {
@@ -83,6 +85,9 @@ struct HomeMainWidget: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: iconSize.width, height: iconSize.height)
+                // Same 40 × 40 slot for the 40 × 40 work icon and the 40 × 27 bed, so the
+                // header (and everything below it) keeps its height when the tab switches.
+                .frame(width: 40, height: 40)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
                 Text(title)
@@ -214,6 +219,8 @@ struct HomeSecondaryCard<Item: View>: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .homeWidgetBackground()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("secondaryCard")
     }
 
     @ViewBuilder private func columns(rules: Bool) -> some View {
