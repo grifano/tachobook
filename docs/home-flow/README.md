@@ -54,7 +54,7 @@ Individual "before" captures: `contrast-before/`.
 ## Work ↔ Rest without layout jump (review fix, 18.10.2026)
 
 Cause: the header icon slot followed the icon size (40 × 40 work, 40 × 27 bed), so the Rest card was
-shorter. Measured by \`HomeFlowUITests.testToggleDoesNotShiftLayout\` (accessibility frames, pt):
+shorter. Measured by `HomeFlowUITests.testToggleDoesNotShiftLayout` (accessibility frames, pt):
 
 | Width | Before: Work / Rest widget height | Before: summary card y (Work / Rest) | After: widget height (Work, Rest, work state) | After: card y |
 |---|---|---|---|---|
