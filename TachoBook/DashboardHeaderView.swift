@@ -5,13 +5,25 @@
 
 import SwiftUI
 
-/// Figma "Main Top Header": the current weekday and date with the week strip.
+/// Figma "Main Top Header": the viewed weekday and date with the week strip. After swiping back
+/// a Today button joins the settings icon (not in Figma; a solid dark capsule so its text keeps contrast).
 public struct DashboardHeaderView: View {
+    /// The day shown (today, or an earlier day after swiping back).
     public var date: Date
+    public var today: Date
+    public var onToday: () -> Void
+    /// VoiceOver adjust: +1 goes toward today, −1 to the previous day.
+    public var onAdjust: (Int) -> Void
 
-    public init(date: Date = Date()) {
+    public init(date: Date = Date(), today: Date? = nil, onToday: @escaping () -> Void = {},
+                onAdjust: @escaping (Int) -> Void = { _ in }) {
         self.date = date
+        self.today = today ?? date
+        self.onToday = onToday
+        self.onAdjust = onAdjust
     }
+
+    private var isToday: Bool { Calendar.current.isDate(date, inSameDayAs: today) }
 
     public var body: some View {
         VStack(spacing: 8) {
@@ -28,6 +40,22 @@ public struct DashboardHeaderView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+                if !isToday {
+                    Button(action: onToday) {
+                        Text("Today")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .frame(minHeight: 44)
+                            // Solid dark fill: translucent glass over the sky failed the contrast audit.
+                            .background(TachoTheme.blueText, in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Back to today")
+                    .accessibilityIdentifier("todayButton")
+                }
+
                 // Settings has no destination yet; shown as in Figma without navigation.
                 Image(systemName: "gear")
                     .font(.body.weight(.medium))
@@ -41,7 +69,7 @@ public struct DashboardHeaderView: View {
 
             HStack(spacing: 8) {
                 ForEach(HomeTimeline.weekStrip(around: date), id: \.offset) { day in
-                    WeekDayItem(day: day)
+                    WeekDayItem(day: day, isViewedToday: isToday, onAdjust: onAdjust)
                 }
             }
             .padding(.horizontal, 8)
@@ -50,8 +78,11 @@ public struct DashboardHeaderView: View {
     }
 }
 
+/// `day.isToday` marks the viewed day (the centre of the strip).
 struct WeekDayItem: View {
     var day: HomeTimeline.WeekStripDay
+    var isViewedToday = true
+    var onAdjust: (Int) -> Void = { _ in }
 
     /// Figma fades neighbours to 50 % and 25 % opacity; solid lighter grays keep the
     /// hierarchy with readable contrast (the audit rejects translucent text).
@@ -80,9 +111,15 @@ struct WeekDayItem: View {
         }
         // Only today is announced; the neighbouring days carry no action yet.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(day.isToday ? "Today, \(day.date.formatted(date: .complete, time: .omitted))" : "")
+        .accessibilityLabel(day.isToday
+            ? "\(isViewedToday ? "Today, " : "")\(day.date.formatted(date: .complete, time: .omitted))" : "")
         .accessibilityAddTraits(day.isToday ? .isSelected : [])
         .accessibilityHidden(!day.isToday)
-        .accessibilityIdentifier(day.isToday ? "weekStripToday" : "weekStripDay")
+        // The selected day is adjustable: swipe up or down to move to the next or previous day.
+        .accessibilityAdjustableAction { direction in
+            guard day.isToday else { return }
+            onAdjust(direction == .increment ? 1 : -1)
+        }
+        .accessibilityIdentifier(day.isToday ? (isViewedToday ? "weekStripToday" : "weekStripSelected") : "weekStripDay")
     }
 }

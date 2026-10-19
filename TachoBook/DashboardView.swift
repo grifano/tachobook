@@ -14,6 +14,9 @@ public struct DashboardView: View {
         case editDayStart
         case editDayEnd
         case driving
+        case pastDayStart
+        case pastDayEnd
+        case pastDriving
 
         var id: String { rawValue }
     }
@@ -24,6 +27,25 @@ public struct DashboardView: View {
     @State private var tabOverride: HomeTab?
     @State private var showDrivingAlert = false
     @State private var drivingAlertPending = false
+    /// 0 is today (the live Home); 1…`DayHistory.maxDaysBack` are earlier days. View state only:
+    /// browsing never writes to the store.
+    @State private var daysBack = DashboardView.initialDaysBack
+    @State private var slideEdge: Edge = .trailing
+    /// True while a horizontal swipe is under way, and shortly after it ends. A swipe across a
+    /// wide capsule or card must never count as a tap on it.
+    @GestureState private var isSwiping = false
+    @State private var swipeEndedAt: Date?
+
+    /// DEBUG only: `-startDaysBack 1` opens an earlier day, for screenshots and audits.
+    private static var initialDaysBack: Int {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let index = args.firstIndex(of: "-startDaysBack"), index + 1 < args.count, let value = Int(args[index + 1]) {
+            return min(max(value, 0), DayHistory.maxDaysBack)
+        }
+        #endif
+        return 0
+    }
 
     public init(model: DayLogModel = DayLogModel.dashboardModel()) {
         self._model = State(initialValue: model)
@@ -31,7 +53,7 @@ public struct DashboardView: View {
 
     /// The default tab follows the shift state; the toggle only overrides the view.
     private var tab: Binding<HomeTab> {
-        let defaultTab: HomeTab = model.isResting ? .rest : .work
+        let defaultTab: HomeTab = daysBack == 0 && model.isResting ? .rest : .work
         return Binding(
             get: { tabOverride ?? defaultTab },
             set: { tabOverride = $0 == defaultTab ? nil : $0 }
@@ -42,10 +64,17 @@ public struct DashboardView: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let now = context.date
             VStack(spacing: 0) {
-                DashboardHeaderView(date: now)
+                DashboardHeaderView(date: daysBack == 0 ? now : DayHistory.day(daysBack: daysBack, from: now),
+                                    today: now, onToday: { step(to: 0) },
+                                    onAdjust: { step(to: daysBack - $0) })
+                    .transaction { $0.animation = nil }
                 ScrollView {
                     VStack(spacing: 20) {
-                        content(now: now)
+                        if daysBack == 0 {
+                            content(now: now)
+                        } else {
+                            pastDayContent(now: now)
+                        }
                         if let error = model.storageError {
                             Text(error).font(.footnote).foregroundStyle(.white)
                         }
@@ -53,8 +82,12 @@ public struct DashboardView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 2)
                     .padding(.bottom, 16)
+                    .id(daysBack)
+                    .transition(.push(from: slideEdge))
+                    .allowsHitTesting(!isSwiping)
                 }
                 .scrollIndicators(.hidden)
+                .simultaneousGesture(daySwipe)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -74,12 +107,13 @@ public struct DashboardView: View {
             .ignoresSafeArea()
         }
         .onChange(of: model.isResting) { tabOverride = nil }
+        .onChange(of: daysBack) { tabOverride = nil }
         .sheet(item: $sheet, onDismiss: presentPendingDrivingAlert) { sheet in
             sheetContent(sheet)
         }
         .alert("Shift closed", isPresented: $showDrivingAlert) {
             Button("Later", role: .cancel) {}
-            Button("Add time") { sheet = .driving }
+            Button("Add time") { present(.driving) }
                 .keyboardShortcut(.defaultAction)
         } message: {
             Text("Add your total driving time for this shift.")
@@ -108,7 +142,7 @@ public struct DashboardView: View {
             workWidget(now: now)
             chipRow {
                 startChip(now: now)
-                Button { sheet = .closeShift } label: {
+                Button { present(.closeShift) } label: {
                     HomeCapsuleLabel(symbol: "stop.circle", title: "End of day", style: .primary)
                 }
                 .buttonStyle(HomeCapsuleButtonStyle())
@@ -130,32 +164,39 @@ public struct DashboardView: View {
 
     private func workWidget(now: Date) -> some View {
         let start = model.dayStart
-        let elapsed = model.shiftElapsedSeconds(at: now) ?? 0
-        // A frozen shift is judged at its close time, a running one at now.
-        let instant = model.currentRestStart ?? now
-        let markers = start.map { HomeTimeline.dutyMarkers(shiftStart: $0) }
-        let warning = start.flatMap { start in
-            HomeTimeline.isDutyWarning(shiftStart: start, at: instant)
-                ? HomeTimeline.remainingDuration(seconds: HomeTimeline.dutyRemainingSeconds(shiftStart: start, at: instant))
-                : nil
-        }
         let subtitle = start.map {
             "\(HomeTimeline.dayLabel($0, relativeTo: now)) · Started \(HomeTimeline.clockLabel($0, relativeTo: $0))"
         } ?? "Today"
+        // A frozen shift is judged at its close time, a running one at now.
+        return workWidget(start: start, elapsed: model.shiftElapsedSeconds(at: now) ?? 0,
+                          instant: model.currentRestStart ?? now, subtitle: subtitle,
+                          isRestEnabled: model.isResting, labelsRelativeTo: now)
+    }
+
+    /// Work card for any shift. `elapsed` nil shows the "--:--" placeholder instead of zeros.
+    private func workWidget(start: Date?, elapsed: Int?, instant: Date, subtitle: String,
+                            isRestEnabled: Bool, labelsRelativeTo reference: Date,
+                            placeholder: String = "--:--") -> some View {
+        let markers = start.map { HomeTimeline.dutyMarkers(shiftStart: $0) }
+        let warning = start.flatMap { start in
+            elapsed != nil && HomeTimeline.isDutyWarning(shiftStart: start, at: instant)
+                ? HomeTimeline.remainingDuration(seconds: HomeTimeline.dutyRemainingSeconds(shiftStart: start, at: instant))
+                : nil
+        }
         return HomeMainWidget(
             icon: "HomeWorkIcon", iconSize: CGSize(width: 40, height: 40),
             title: "Work Time", subtitle: subtitle, accent: .tachoDark,
-            tab: tab, isRestEnabled: model.isResting,
+            tab: tab, isRestEnabled: isRestEnabled,
             gauge: GaugeProgressView(
                 limit: "\(HomeTimeline.dutyMarkerHours.second)h",
-                value: HomeTimeline.clockDuration(seconds: elapsed),
-                progress: Double(elapsed) / (Double(HomeTimeline.dutyMarkerHours.second) * 3600),
+                value: elapsed.map { HomeTimeline.clockDuration(seconds: $0) } ?? placeholder,
+                progress: Double(elapsed ?? 0) / (Double(HomeTimeline.dutyMarkerHours.second) * 3600),
                 tint: .tachoOrange, warning: warning),
             limits: [
                 HomeLimit(label: "\(HomeTimeline.dutyMarkerHours.first)h limit end",
-                          value: markers.map { HomeTimeline.clockLabel($0.first, relativeTo: now) } ?? "--:--"),
+                          value: markers.map { HomeTimeline.clockLabel($0.first, relativeTo: reference) } ?? placeholder),
                 HomeLimit(label: "\(HomeTimeline.dutyMarkerHours.second)h limit end",
-                          value: markers.map { HomeTimeline.clockLabel($0.second, relativeTo: now) } ?? "--:--"),
+                          value: markers.map { HomeTimeline.clockLabel($0.second, relativeTo: reference) } ?? placeholder),
             ])
     }
 
@@ -190,7 +231,7 @@ public struct DashboardView: View {
             HomeTimeline.availabilityCountdown(restStart: $0, kind: model.restKind, now: now)
         }
         let isAvailable = countdown == nil && model.storageError == nil
-        return Button { sheet = .startShift } label: {
+        return Button { present(.startShift) } label: {
             HomeCapsuleLabel(symbol: "play.circle", title: "Start of day",
                              subtitle: countdown.map { "Available in \($0)" },
                              style: isAvailable ? .primary : .dimmed,
@@ -233,13 +274,13 @@ public struct DashboardView: View {
         let items = [
             HomeSummaryItem(symbol: "play.circle", label: "Day started",
                             value: model.dayStart.map { HomeTimeline.clockLabel($0, relativeTo: now) } ?? "?",
-                            identifier: "summaryDayStarted") { sheet = .editDayStart },
+                            identifier: "summaryDayStarted") { present(.editDayStart) },
             HomeSummaryItem(symbol: "steeringwheel", label: "Driving",
                             value: HomeTimeline.drivingLabel(minutes: model.drivingMinutes),
-                            identifier: "summaryDriving") { sheet = .driving },
+                            identifier: "summaryDriving") { present(.driving) },
             HomeSummaryItem(symbol: "stop.circle", label: "Day closed",
                             value: model.dayEnd.map { HomeTimeline.clockLabel($0, relativeTo: now) } ?? "?",
-                            identifier: "summaryDayClosed") { sheet = .editDayEnd },
+                            identifier: "summaryDayClosed") { present(.editDayEnd) },
         ]
         return HomeSecondaryCard(symbol: "info.circle.fill",
                                  title: displayedRestKind(now: now) == .weekly ? "Last Shift Summary" : "Today’s summary",
@@ -260,6 +301,111 @@ public struct DashboardView: View {
     private func displayedRestKind(now: Date) -> RestKind {
         guard let restStart = model.currentRestStart else { return model.restKind }
         return HomeTimeline.displayedRestKind(stored: model.restKind, restStart: restStart, now: now)
+    }
+
+    // MARK: - Earlier days
+
+    private static func isHorizontalSwipe(_ translation: CGSize) -> Bool {
+        abs(translation.width) > 30 && abs(translation.width) > abs(translation.height) * 1.5
+    }
+
+    private var daySwipe: some Gesture {
+        DragGesture(minimumDistance: 30)
+            .updating($isSwiping) { drag, state, _ in
+                state = Self.isHorizontalSwipe(drag.translation)
+            }
+            .onEnded { drag in
+                // Horizontal, deliberate swipes only; vertical scrolling and open sheets are untouched.
+                guard Self.isHorizontalSwipe(drag.translation) else { return }
+                swipeEndedAt = Date()
+                guard sheet == nil, !showDrivingAlert, abs(drag.translation.width) > 60 else { return }
+                // Left goes to the previous day, right toward today.
+                step(to: daysBack + (drag.translation.width < 0 ? 1 : -1))
+            }
+    }
+
+    /// Opens a sheet from a tap, unless the touch was a swipe.
+    private func present(_ next: HomeSheet) {
+        let justSwiped = swipeEndedAt.map { Date().timeIntervalSince($0) < 0.4 } ?? false
+        guard !isSwiping, !justSwiped else { return }
+        sheet = next
+    }
+
+    private func step(to target: Int) {
+        let next = min(max(target, 0), DayHistory.maxDaysBack)
+        guard next != daysBack else { return }
+        slideEdge = next > daysBack ? .trailing : .leading
+        withAnimation(.easeInOut(duration: 0.25)) { daysBack = next }
+    }
+
+    @ViewBuilder
+    private func pastDayContent(now: Date) -> some View {
+        let day = DayHistory.day(daysBack: daysBack, from: now)
+        let record = model.dayRecord(on: day)
+        if tab.wrappedValue == .rest {
+            restTakenWidget(day: day, rest: model.restTaken(after: record, now: now))
+        } else {
+            pastWorkWidget(day: day, record: record, now: now)
+        }
+        pastSummaryCard(day: day, record: record)
+    }
+
+    private func pastWorkWidget(day: Date, record: DutyPeriod?, now: Date) -> some View {
+        let start = record?.start
+        let end = record?.end
+        let elapsed = start.flatMap { start in end.map { HomeTimeline.elapsedSeconds(from: start, to: $0) } }
+        let subtitle = start.map { "\(HomeTimeline.dateLabel($0)) · Started \(HomeTimeline.clockLabel($0, relativeTo: $0))" }
+            ?? HomeTimeline.dateLabel(day)
+        return workWidget(start: start, elapsed: elapsed, instant: end ?? now, subtitle: subtitle,
+                          isRestEnabled: true, labelsRelativeTo: day)
+    }
+
+    /// The Rest card layout for a past day: time taken after the shift, without 9/11/24/45 h markers.
+    private func restTakenWidget(day: Date, rest: RestTaken?) -> some View {
+        let placeholder = "--:--"
+        return HomeMainWidget(
+            icon: "HomeRestIcon", iconSize: CGSize(width: 40, height: 27),
+            title: "Rest Taken",
+            subtitle: rest.map { "Closed \(HomeTimeline.dateLabel($0.start)) · \(HomeTimeline.clockLabel($0.start, relativeTo: $0.start))" }
+                ?? HomeTimeline.dateLabel(day),
+            accent: TachoTheme.blueText, tab: tab, isRestEnabled: true,
+            gauge: GaugeProgressView(
+                limit: rest?.end == nil && rest != nil ? "So far" : "Taken",
+                value: rest.map { HomeTimeline.clockDuration(seconds: $0.seconds) } ?? placeholder,
+                progress: 0, tint: .tachoBlue),
+            limits: [
+                HomeLimit(label: "Rest started",
+                          value: rest.map { HomeTimeline.clockLabel($0.start, relativeTo: day) } ?? placeholder),
+                HomeLimit(label: "Rest ended",
+                          value: rest.map { $0.end.map { HomeTimeline.clockLabel($0, relativeTo: day) } ?? "Running" }
+                              ?? placeholder),
+            ])
+    }
+
+    /// Day started, Driving and Day closed of an earlier day; empty values show "?".
+    private func pastSummaryCard(day: Date, record: DutyPeriod?) -> some View {
+        let items = [
+            HomeSummaryItem(symbol: "play.circle", label: "Day started",
+                            value: record?.start.map { HomeTimeline.clockLabel($0, relativeTo: day) } ?? "?",
+                            identifier: "summaryDayStarted") { present(.pastDayStart) },
+            HomeSummaryItem(symbol: "steeringwheel", label: "Driving",
+                            value: HomeTimeline.drivingLabel(minutes: record?.drivingMinutes),
+                            identifier: "summaryDriving") { present(.pastDriving) },
+            HomeSummaryItem(symbol: "stop.circle", label: "Day closed",
+                            value: record?.end.map { HomeTimeline.clockLabel($0, relativeTo: day) } ?? "?",
+                            identifier: "summaryDayClosed") { present(.pastDayEnd) },
+        ]
+        return HomeSecondaryCard(symbol: "info.circle.fill", title: "Day summary", count: items.count) { index in
+            let item = items[index]
+            Button(action: item.action) {
+                HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(model.storageError != nil)
+            .accessibilityIdentifier(item.identifier)
+            .accessibilityHint("Edit")
+        }
     }
 
     // MARK: - Sheets
@@ -295,8 +441,32 @@ public struct DashboardView: View {
             DailyDrivingSheet(initialMinutes: model.drivingMinutes,
                               onConfirm: { model.setDrivingMinutes($0); dismissSheet() },
                               onCancel: dismissSheet)
+        case .pastDayStart:
+            let (day, now) = (viewedDay, Date())
+            let record = model.dayRecord(on: day)
+            TimeEntrySheet(kind: .shiftStart, initialDate: record?.start ?? DayHistory.combine(day: day, timeOf: now),
+                           range: DayHistory.range(of: day),
+                           isValid: { model.canSetStart($0, onDay: day, now: Date()) },
+                           onConfirm: { model.setStart($0, onDay: day, now: Date()); dismissSheet() },
+                           onCancel: dismissSheet)
+        case .pastDayEnd:
+            let (day, now) = (viewedDay, Date())
+            let record = model.dayRecord(on: day)
+            let floor = record?.start ?? day
+            TimeEntrySheet(kind: .restStart, initialDate: record?.end ?? DayHistory.combine(day: day, timeOf: now),
+                           range: floor...max(floor, now),
+                           isValid: { model.canSetEnd($0, onDay: day, now: Date()) },
+                           onConfirm: { model.setEnd($0, onDay: day, now: Date()); dismissSheet() },
+                           onCancel: dismissSheet)
+        case .pastDriving:
+            let day = viewedDay
+            DailyDrivingSheet(initialMinutes: model.dayRecord(on: day)?.drivingMinutes,
+                              onConfirm: { model.setDriving(minutes: $0, onDay: day); dismissSheet() },
+                              onCancel: dismissSheet)
         }
     }
+
+    private var viewedDay: Date { DayHistory.day(daysBack: daysBack, from: Date()) }
 
     private func dismissSheet() {
         sheet = nil

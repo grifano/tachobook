@@ -42,15 +42,18 @@ public struct TimeEntrySheet: View {
     }
 
     var kind: Kind
+    /// Limits the picker, e.g. to the day being edited; nil leaves it open.
+    var range: ClosedRange<Date>?
     var isValid: (Date) -> Bool
     var onConfirm: (Date) -> Void
     var onCancel: () -> Void
 
     @State private var date: Date
 
-    public init(kind: Kind, initialDate: Date, isValid: @escaping (Date) -> Bool,
+    public init(kind: Kind, initialDate: Date, range: ClosedRange<Date>? = nil, isValid: @escaping (Date) -> Bool,
                 onConfirm: @escaping (Date) -> Void, onCancel: @escaping () -> Void) {
         self.kind = kind
+        self.range = range
         self.isValid = isValid
         self.onConfirm = onConfirm
         self.onCancel = onCancel
@@ -63,7 +66,7 @@ public struct TimeEntrySheet: View {
                          onCancel: onCancel, onConfirm: { onConfirm(date) })
             VStack(spacing: 16) {
                 SheetSymbol(image: kind.icon, height: kind.iconHeight)
-                DatePicker(kind.title, selection: $date, displayedComponents: [.date, .hourAndMinute])
+                picker
                     .datePickerStyle(.compact)
                     .labelsHidden()
                     .accessibilityIdentifier("sheetDatePicker")
@@ -77,6 +80,16 @@ public struct TimeEntrySheet: View {
         .presentationDragIndicator(.hidden)
         .presentationBackground {
             Rectangle().fill(Color(red: 245/255, green: 245/255, blue: 245/255).opacity(0.94))
+        }
+    }
+}
+
+extension TimeEntrySheet {
+    @ViewBuilder fileprivate var picker: some View {
+        if let range {
+            DatePicker(kind.title, selection: $date, in: range, displayedComponents: [.date, .hourAndMinute])
+        } else {
+            DatePicker(kind.title, selection: $date, displayedComponents: [.date, .hourAndMinute])
         }
     }
 }

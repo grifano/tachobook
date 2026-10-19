@@ -113,6 +113,7 @@ struct HomeMainWidget: View {
                     Label(limit.value, systemImage: "clock")
                         .labelStyle(TightLabelStyle())
                         .font(.title2.bold())
+                        .fontWeight(["--:--", "?"].contains(limit.value) ? .black : nil)
                         .monospacedDigit()
                 }
                 .foregroundStyle(Color.tachoDark)

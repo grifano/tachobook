@@ -14,7 +14,7 @@ public enum LogEntryType: Hashable, Sendable {
 
 @Observable
 public final class DayLogModel {
-    private var state: ShiftJournal
+    private(set) var state: ShiftJournal
     @ObservationIgnored private var store: ShiftStore?
     public private(set) var storageError: String?
 
@@ -140,7 +140,7 @@ public final class DayLogModel {
         URL.applicationSupportDirectory.appending(path: "TachoBook/shift-journal-v1.json")
     }
 
-    private func update(_ change: (inout ShiftJournal) -> Void) {
+    func update(_ change: (inout ShiftJournal) -> Void) {
         // Preserve an unreadable journal instead of overwriting it with an empty state.
         guard storageError == nil else { return }
         var next = state
@@ -202,6 +202,7 @@ public final class DayLogModel {
             journal.current.rests[journal.current.rests.count - 1].end = date
             journal.current.rests[journal.current.rests.count - 1].dailyRestConfirmed = true
             journal.history.append(journal.current)
+            journal.history.sortChronologically()
             journal.current = DutyPeriod(date: date, start: date)
         }
     }
@@ -345,6 +346,7 @@ public final class DayLogModel {
     /// Start of day: available once the current rest reached its required milestone.
     public func canStartShift(at date: Date, now: Date) -> Bool {
         guard date <= now else { return false }
+        if let archivedEnd = archivedPeriods.compactMap(\.end).max(), date < archivedEnd { return false }
         if isResting, let rest = restSegments.last {
             return date.timeIntervalSince(rest.start) >= Double(restKind.requiredHours) * 3600
         }
@@ -376,6 +378,7 @@ public final class DayLogModel {
     public func canEditDayStart(_ date: Date, now: Date) -> Bool {
         guard let current = dayStart, date <= now else { return false }
         if let end = dayEnd, date > end { return false }
+        if overlapsOtherRecords(start: date, end: dayEnd ?? date, excluding: dutyID, now: now) { return false }
         if let firstRest = restSegments.first, date > firstRest.start { return false }
         if let previous = previousRest {
             if previous.end == current { return date >= previous.start }
@@ -400,6 +403,7 @@ public final class DayLogModel {
     public func canEditDayEnd(_ date: Date, now: Date) -> Bool {
         guard dayEnd != nil, let start = dayStart else { return false }
         return date >= start && date <= now && (lastClosedRestEnd.map { date >= $0 } ?? true)
+            && !overlapsOtherRecords(start: start, end: date, excluding: dutyID, now: now)
     }
 
     public func editDayEnd(_ date: Date, now: Date) {

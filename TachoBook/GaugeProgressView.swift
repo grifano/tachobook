@@ -38,6 +38,8 @@ public struct GaugeProgressView: View {
                     .frame(width: 60, height: 1)
                 Text(value)
                     .font(.largeTitle)
+                    // Thin "--:--" and "?" placeholders need a heavier stroke to stay legible.
+                    .fontWeight(["--:--", "?"].contains(value) ? .black : nil)
                     .tracking(0.4)
                     .frame(height: 41)
             }
