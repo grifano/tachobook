@@ -44,17 +44,18 @@ public struct TimeEntrySheet: View {
     var kind: Kind
     /// Limits the picker, e.g. to the day being edited; nil leaves it open.
     var range: ClosedRange<Date>?
-    var isValid: (Date) -> Bool
+    /// nil when the time can be confirmed, else why not (shown under the picker).
+    var check: (Date) -> TimeEntryIssue?
     var onConfirm: (Date) -> Void
     var onCancel: () -> Void
 
     @State private var date: Date
 
-    public init(kind: Kind, initialDate: Date, range: ClosedRange<Date>? = nil, isValid: @escaping (Date) -> Bool,
+    public init(kind: Kind, initialDate: Date, range: ClosedRange<Date>? = nil, check: @escaping (Date) -> TimeEntryIssue?,
                 onConfirm: @escaping (Date) -> Void, onCancel: @escaping () -> Void) {
         self.kind = kind
         self.range = range
-        self.isValid = isValid
+        self.check = check
         self.onConfirm = onConfirm
         self.onCancel = onCancel
         _date = State(initialValue: initialDate)
@@ -62,7 +63,7 @@ public struct TimeEntrySheet: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            SheetToolbar(title: kind.title, subtitle: kind.subtitle, canConfirm: isValid(date),
+            SheetToolbar(title: kind.title, subtitle: kind.subtitle, canConfirm: check(date) == nil,
                          onCancel: onCancel, onConfirm: { onConfirm(date) })
             VStack(spacing: 16) {
                 SheetSymbol(image: kind.icon, height: kind.iconHeight)
@@ -70,6 +71,16 @@ public struct TimeEntrySheet: View {
                     .datePickerStyle(.compact)
                     .labelsHidden()
                     .accessibilityIdentifier("sheetDatePicker")
+                // Why Confirm is disabled; sits below the picker so the picker never moves.
+                if let reason = check(date)?.message() {
+                    Text(reason)
+                        .font(.footnote)
+                        .foregroundStyle(TachoTheme.sheetSubtitle)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 24)
+                        .accessibilityIdentifier("sheetReason")
+                }
             }
             .padding(.top, 59)
             Spacer(minLength: 24)

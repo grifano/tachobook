@@ -65,7 +65,7 @@ public struct DashboardView: View {
             let now = context.date
             VStack(spacing: 0) {
                 DashboardHeaderView(date: daysBack == 0 ? now : DayHistory.day(daysBack: daysBack, from: now),
-                                    today: now, onToday: { step(to: 0) },
+                                    today: now, onToday: { step(to: 0) }, onSelect: { step(to: $0) },
                                     onAdjust: { step(to: daysBack - $0) })
                     .transaction { $0.animation = nil }
                 ScrollView {
@@ -319,8 +319,8 @@ public struct DashboardView: View {
                 guard Self.isHorizontalSwipe(drag.translation) else { return }
                 swipeEndedAt = Date()
                 guard sheet == nil, !showDrivingAlert, abs(drag.translation.width) > 60 else { return }
-                // Left goes to the previous day, right toward today.
-                step(to: daysBack + (drag.translation.width < 0 ? 1 : -1))
+                // Finger moving right opens the previous day, left goes toward today (as in iOS Calendar).
+                step(to: daysBack + (drag.translation.width > 0 ? 1 : -1))
             }
     }
 
@@ -334,7 +334,7 @@ public struct DashboardView: View {
     private func step(to target: Int) {
         let next = min(max(target, 0), DayHistory.maxDaysBack)
         guard next != daysBack else { return }
-        slideEdge = next > daysBack ? .trailing : .leading
+        slideEdge = next > daysBack ? .leading : .trailing
         withAnimation(.easeInOut(duration: 0.25)) { daysBack = next }
     }
 
@@ -347,7 +347,7 @@ public struct DashboardView: View {
         } else {
             pastWorkWidget(day: day, record: record, now: now)
         }
-        pastSummaryCard(day: day, record: record)
+        pastSummaryCard(day: day, record: record, now: now)
     }
 
     private func pastWorkWidget(day: Date, record: DutyPeriod?, now: Date) -> some View {
@@ -382,8 +382,28 @@ public struct DashboardView: View {
             ])
     }
 
+    /// One line under the summary when a rest covers the whole day; a tap opens the day the rest
+    /// started when the swipe can reach it, otherwise it is plain text.
+    private func restCoverFooter(_ note: RestCoverNote, now: Date) -> AnyView {
+        let text = Text("No shift this day \u{2014} you were resting since \(HomeTimeline.dayAndTime(note.restStart)).")
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(Color.tachoDark)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        guard let target = DayHistory.daysBack(of: note.restStart, from: now) else {
+            return AnyView(text.accessibilityIdentifier("restCoverNote"))
+        }
+        return AnyView(
+            Button { step(to: target) } label: { text.frame(minHeight: 44).contentShape(Rectangle()) }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens that day")
+                .accessibilityIdentifier("restCoverNote")
+        )
+    }
+
     /// Day started, Driving and Day closed of an earlier day; empty values show "?".
-    private func pastSummaryCard(day: Date, record: DutyPeriod?) -> some View {
+    private func pastSummaryCard(day: Date, record: DutyPeriod?, now: Date) -> some View {
         let items = [
             HomeSummaryItem(symbol: "play.circle", label: "Day started",
                             value: record?.start.map { HomeTimeline.clockLabel($0, relativeTo: day) } ?? "?",
@@ -395,7 +415,9 @@ public struct DashboardView: View {
                             value: record?.end.map { HomeTimeline.clockLabel($0, relativeTo: day) } ?? "?",
                             identifier: "summaryDayClosed") { present(.pastDayEnd) },
         ]
-        return HomeSecondaryCard(symbol: "info.circle.fill", title: "Day summary", count: items.count) { index in
+        let note = model.restCoverNote(onDay: day, now: now)
+        return HomeSecondaryCard(symbol: "info.circle.fill", title: "Day summary", count: items.count,
+                                 footer: note.map { restCoverFooter($0, now: now) }) { index in
             let item = items[index]
             Button(action: item.action) {
                 HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value)
@@ -415,17 +437,17 @@ public struct DashboardView: View {
         switch sheet {
         case .startShift:
             TimeEntrySheet(kind: .shiftStart, initialDate: Date(),
-                           isValid: { model.canStartShift(at: $0, now: Date()) },
+                           check: { model.checkStartShift(at: $0, now: Date()) },
                            onConfirm: { model.startShift(at: $0, now: Date()); dismissSheet() },
                            onCancel: dismissSheet)
         case .editDayStart:
             TimeEntrySheet(kind: .shiftStart, initialDate: model.dayStart ?? Date(),
-                           isValid: { model.canEditDayStart($0, now: Date()) },
+                           check: { model.checkEditDayStart($0, now: Date()) },
                            onConfirm: { model.editDayStart($0, now: Date()); dismissSheet() },
                            onCancel: dismissSheet)
         case .closeShift:
             TimeEntrySheet(kind: .restStart, initialDate: Date(),
-                           isValid: { model.canCloseShift(at: $0, now: Date()) },
+                           check: { model.checkCloseShift(at: $0, now: Date()) },
                            onConfirm: { date in
                                model.closeShift(at: date, now: Date())
                                drivingAlertPending = model.isResting
@@ -434,7 +456,7 @@ public struct DashboardView: View {
                            onCancel: dismissSheet)
         case .editDayEnd:
             TimeEntrySheet(kind: .restStart, initialDate: model.dayEnd ?? Date(),
-                           isValid: { model.canEditDayEnd($0, now: Date()) },
+                           check: { model.checkEditDayEnd($0, now: Date()) },
                            onConfirm: { model.editDayEnd($0, now: Date()); dismissSheet() },
                            onCancel: dismissSheet)
         case .driving:
@@ -446,7 +468,7 @@ public struct DashboardView: View {
             let record = model.dayRecord(on: day)
             TimeEntrySheet(kind: .shiftStart, initialDate: record?.start ?? DayHistory.combine(day: day, timeOf: now),
                            range: DayHistory.range(of: day),
-                           isValid: { model.canSetStart($0, onDay: day, now: Date()) },
+                           check: { model.checkSetStart($0, onDay: day, now: Date()) },
                            onConfirm: { model.setStart($0, onDay: day, now: Date()); dismissSheet() },
                            onCancel: dismissSheet)
         case .pastDayEnd:
@@ -455,7 +477,7 @@ public struct DashboardView: View {
             let floor = record?.start ?? day
             TimeEntrySheet(kind: .restStart, initialDate: record?.end ?? DayHistory.combine(day: day, timeOf: now),
                            range: floor...max(floor, now),
-                           isValid: { model.canSetEnd($0, onDay: day, now: Date()) },
+                           check: { model.checkSetEnd($0, onDay: day, now: Date()) },
                            onConfirm: { model.setEnd($0, onDay: day, now: Date()); dismissSheet() },
                            onCancel: dismissSheet)
         case .pastDriving:

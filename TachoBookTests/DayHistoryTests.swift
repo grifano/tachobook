@@ -286,4 +286,137 @@ struct DayHistoryTests {
         model.startNewShift(at: date(19, 5), dailyRestConfirmed: true)
         #expect(model.archivedPeriods.compactMap(\.start) == [date(17, 6), date(18, 6)])
     }
+
+    // MARK: - F4: why Confirm is disabled
+
+    /// 24 h device locale so the expected copy is stable.
+    private let gb: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        calendar.locale = Locale(identifier: "en_GB")
+        return calendar
+    }()
+
+    private func message(_ issue: TimeEntryIssue?) -> String? { issue?.message(calendar: gb) }
+
+    @Test func futureTimeHasAReason() {
+        let model = DayLogModel()
+        let issue = model.checkSetEnd(now.addingTimeInterval(60), onDay: day(19), now: now, calendar: calendar)
+        #expect(issue == .future)
+        #expect(message(issue) == "This time hasn't happened yet.")
+    }
+
+    @Test func endBeforeStartExplainsWithTheStartTime() {
+        let model = DayLogModel()
+        enter(model, day: 16, start: date(16, 6, 10))
+        let issue = model.checkSetEnd(date(16, 5), onDay: day(16), now: now, calendar: calendar)
+        #expect(message(issue) == "Day closed can\u{2019}t be before Day started (Fri 16, 06:10).")
+        // A start later than the entered end gives the same relation.
+        enter(model, day: 16, end: date(16, 14))
+        #expect(message(model.checkSetStart(date(16, 15), onDay: day(16), now: now, calendar: calendar))
+                == "Day closed can\u{2019}t be before Day started (Fri 16, 15:00).")
+    }
+
+    @Test func overlapNamesTheBlockingShift() {
+        // Owner testing: Wed 14 20:10 to Sun 18 20:01 covers Saturday.
+        let model = DayLogModel()
+        enter(model, day: 14, start: date(14, 20, 10), end: date(18, 20, 1))
+        let issue = model.checkSetStart(date(17, 5, 40), onDay: day(17), now: now, calendar: calendar)
+        #expect(issue == .overlap(from: date(14, 20, 10), to: date(18, 20, 1)))
+        #expect(message(issue) == "This overlaps your shift from Wed 14, 20:10 to Sun 18, 20:01.")
+        #expect(!model.canSetStart(date(17, 5, 40), onDay: day(17), now: now, calendar: calendar), "Confirm stays disabled")
+    }
+
+    @Test func overlapWithTheOpenShiftSaysCurrentShift() {
+        let model = DayLogModel()
+        model.setDayStart(date(14, 20, 10))
+        let issue = model.checkSetStart(date(16, 8), onDay: day(16), now: now, calendar: calendar)
+        #expect(issue == .overlap(from: date(14, 20, 10), to: nil))
+        #expect(message(issue) == "This overlaps your current shift from Wed 14, 20:10.")
+    }
+
+    @Test func timeOutsideTheSelectedDayAsksForThatDay() {
+        let model = DayLogModel()
+        let issue = model.checkSetStart(date(18, 8), onDay: day(17), now: now, calendar: calendar)
+        #expect(issue == .outsideDay(day(17)))
+        #expect(message(issue) == "Pick a time on Sat 17.")
+        // Day closed without a start must not precede the day itself.
+        #expect(message(model.checkSetEnd(date(16, 22), onDay: day(17), now: now, calendar: calendar)) == "Pick a time on Sat 17.")
+    }
+
+    @Test func aDisabledCaseWithoutApprovedCopyShowsNothing() {
+        #expect(TimeEntryIssue.other.message(calendar: gb) == nil)
+        // Start of day before the rest milestone has no copy in the approved list.
+        let model = DayLogModel()
+        model.seedWeeklyRestIfEmpty(shiftStart: date(16, 6), restStart: date(16, 14), drivingMinutes: 60)
+        #expect(model.checkStartShift(at: date(16, 15), now: now) == .other)
+    }
+
+    @Test func homeSheetsReturnReasons() {
+        let model = DayLogModel()
+        model.setDayStart(date(19, 5))
+        #expect(model.checkCloseShift(at: date(19, 4), now: now) == .endBeforeStart(start: date(19, 5)))
+        #expect(model.checkCloseShift(at: date(19, 13), now: now) == .future)
+        #expect(model.checkCloseShift(at: date(19, 9), now: now) == nil)
+        model.closeShift(at: date(19, 9))
+        #expect(model.checkEditDayEnd(date(19, 4), now: now) == .endBeforeStart(start: date(19, 5)))
+        #expect(model.checkEditDayStart(date(19, 10), now: now) == .endBeforeStart(start: date(19, 10)))
+        #expect(model.checkEditDayStart(date(19, 13), now: now) == .future)
+    }
+
+    // MARK: - F2: which dates the strip can open
+
+    @Test func theSwipeReachesTodayAndThreeDaysBack() {
+        #expect(DayHistory.daysBack(of: date(19, 3), from: now, calendar: calendar) == 0)
+        #expect(DayHistory.daysBack(of: date(18, 23, 59), from: now, calendar: calendar) == 1)
+        #expect(DayHistory.daysBack(of: date(16, 0, 1), from: now, calendar: calendar) == 3)
+        #expect(DayHistory.daysBack(of: date(15, 23), from: now, calendar: calendar) == nil, "deeper than 3 days")
+        #expect(DayHistory.daysBack(of: date(20, 8), from: now, calendar: calendar) == nil, "the future")
+    }
+
+    // MARK: - F3: note on a past day covered by rest
+
+    @Test func aCoveredDayShowsTheNote() {
+        let model = DayLogModel()
+        enter(model, day: 16, start: date(16, 6), end: date(16, 14, 30))
+        // Rest still running: 17th and 18th are covered, the 16th has the shift.
+        #expect(model.restCoverNote(onDay: day(17), now: now, calendar: calendar)?.restStart == date(16, 14, 30))
+        #expect(model.restCoverNote(onDay: day(18), now: now, calendar: calendar)?.restStart == date(16, 14, 30))
+        #expect(model.restCoverNote(onDay: day(16), now: now, calendar: calendar) == nil, "the day has a shift")
+    }
+
+    @Test func todayNeverShowsTheNote() {
+        let model = DayLogModel()
+        enter(model, day: 16, start: date(16, 6), end: date(16, 14))
+        #expect(model.restCoverNote(onDay: day(19), now: now, calendar: calendar) == nil)
+    }
+
+    @Test func aRestThatEndsOnThatDayDoesNotCoverIt() {
+        let model = DayLogModel()
+        enter(model, day: 16, start: date(16, 6), end: date(16, 14))
+        enter(model, day: 18, start: date(18, 7), end: date(18, 15))
+        #expect(model.restCoverNote(onDay: day(17), now: now, calendar: calendar)?.restStart == date(16, 14),
+                "rest runs 16th 14:00 to 18th 07:00, so the 17th is covered")
+        #expect(model.restCoverNote(onDay: day(18), now: now, calendar: calendar) == nil)
+        // Start the 17th at 23:00: the rest ends on that very day.
+        let other = DayLogModel()
+        enter(other, day: 16, start: date(16, 6), end: date(16, 14))
+        enter(other, day: 17, start: date(17, 23), end: date(18, 5))
+        #expect(other.restCoverNote(onDay: day(17), now: now, calendar: calendar) == nil)
+    }
+
+    @Test func aRestFromMoreThanThreeDaysBackGivesANoteWithoutATapTarget() throws {
+        let model = DayLogModel()
+        enter(model, day: 10, start: date(10, 6), end: date(10, 14))
+        let note = try #require(model.restCoverNote(onDay: day(18), now: now, calendar: calendar))
+        #expect(note.restStart == date(10, 14))
+        #expect(DayHistory.daysBack(of: note.restStart, from: now, calendar: calendar) == nil)
+    }
+
+    @Test func aShiftThatCoversTheDayIsNotARestNote() {
+        // The long shift is the covering record, not a rest: no note on Saturday.
+        let model = DayLogModel()
+        enter(model, day: 14, start: date(14, 20, 10), end: date(18, 20, 1))
+        #expect(model.restCoverNote(onDay: day(17), now: now, calendar: calendar) == nil)
+    }
 }

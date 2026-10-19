@@ -12,14 +12,17 @@ public struct DashboardHeaderView: View {
     public var date: Date
     public var today: Date
     public var onToday: () -> Void
+    /// Tap on a reachable date: the number of days back to show.
+    public var onSelect: (Int) -> Void
     /// VoiceOver adjust: +1 goes toward today, −1 to the previous day.
     public var onAdjust: (Int) -> Void
 
     public init(date: Date = Date(), today: Date? = nil, onToday: @escaping () -> Void = {},
-                onAdjust: @escaping (Int) -> Void = { _ in }) {
+                onSelect: @escaping (Int) -> Void = { _ in }, onAdjust: @escaping (Int) -> Void = { _ in }) {
         self.date = date
         self.today = today ?? date
         self.onToday = onToday
+        self.onSelect = onSelect
         self.onAdjust = onAdjust
     }
 
@@ -69,7 +72,9 @@ public struct DashboardHeaderView: View {
 
             HStack(spacing: 8) {
                 ForEach(HomeTimeline.weekStrip(around: date), id: \.offset) { day in
-                    WeekDayItem(day: day, isViewedToday: isToday, onAdjust: onAdjust)
+                    WeekDayItem(day: day, isViewedToday: isToday,
+                                reach: DayHistory.daysBack(of: day.date, from: today),
+                                onSelect: onSelect, onAdjust: onAdjust)
                 }
             }
             .padding(.horizontal, 8)
@@ -78,10 +83,13 @@ public struct DashboardHeaderView: View {
     }
 }
 
-/// `day.isToday` marks the viewed day (the centre of the strip).
+/// `day.isToday` marks the viewed day (the centre of the strip). A date the swipe can reach
+/// (`reach` = days back, today … 3) is a button; the others do nothing and look as before.
 struct WeekDayItem: View {
     var day: HomeTimeline.WeekStripDay
     var isViewedToday = true
+    var reach: Int?
+    var onSelect: (Int) -> Void = { _ in }
     var onAdjust: (Int) -> Void = { _ in }
 
     /// Figma fades neighbours to 50 % and 25 % opacity; solid lighter grays keep the
@@ -90,7 +98,31 @@ struct WeekDayItem: View {
         day.isToday ? 1 : (abs(day.offset) == 1 ? 0.93 : 0.86)
     }
 
+    private var fullDate: String { day.date.formatted(date: .complete, time: .omitted) }
+
     var body: some View {
+        if !day.isToday, let reach {
+            Button { onSelect(reach) } label: { content }
+                .buttonStyle(.plain)
+                .accessibilityLabel(reach == 0 ? "Today, \(fullDate)" : fullDate)
+                .accessibilityIdentifier("weekStripDay")
+        } else {
+            content
+                // Only the viewed day is announced; dates the swipe cannot reach stay silent.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(day.isToday ? "\(isViewedToday ? "Today, " : "")\(fullDate)" : "")
+                .accessibilityAddTraits(day.isToday ? .isSelected : [])
+                .accessibilityHidden(!day.isToday)
+                // The selected day is adjustable: swipe up or down to move to the next or previous day.
+                .accessibilityAdjustableAction { direction in
+                    guard day.isToday else { return }
+                    onAdjust(direction == .increment ? 1 : -1)
+                }
+                .accessibilityIdentifier(day.isToday ? (isViewedToday ? "weekStripToday" : "weekStripSelected") : "weekStripOutOfRange")
+        }
+    }
+
+    private var content: some View {
         VStack(spacing: 4) {
             Text(day.date.formatted(.dateTime.day()))
                 .font(.title3)
@@ -109,17 +141,6 @@ struct WeekDayItem: View {
                     .frame(width: 44, height: 44)
             }
         }
-        // Only today is announced; the neighbouring days carry no action yet.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(day.isToday
-            ? "\(isViewedToday ? "Today, " : "")\(day.date.formatted(date: .complete, time: .omitted))" : "")
-        .accessibilityAddTraits(day.isToday ? .isSelected : [])
-        .accessibilityHidden(!day.isToday)
-        // The selected day is adjustable: swipe up or down to move to the next or previous day.
-        .accessibilityAdjustableAction { direction in
-            guard day.isToday else { return }
-            onAdjust(direction == .increment ? 1 : -1)
-        }
-        .accessibilityIdentifier(day.isToday ? (isViewedToday ? "weekStripToday" : "weekStripSelected") : "weekStripDay")
+        .contentShape(Rectangle())
     }
 }

@@ -107,6 +107,27 @@ public enum HomeTimeline {
         return formatter.string(from: now)
     }
 
+    /// "Sat 17" in the device locale.
+    public static func weekdayAndDay(_ date: Date, calendar: Calendar = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = calendar.locale ?? .current
+        formatter.setLocalizedDateFormatFromTemplate("EEEd")
+        return formatter.string(from: date)
+    }
+
+    /// "Sat 17, 08:34": weekday, day and time in the device locale (24 h or AM/PM as the device uses).
+    public static func dayAndTime(_ date: Date, calendar: Calendar = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = calendar.locale ?? .current
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return "\(weekdayAndDay(date, calendar: calendar)), \(formatter.string(from: date))"
+    }
+
     public struct WeekStripDay: Equatable {
         public var date: Date
         /// Days from today: -2 … 2.

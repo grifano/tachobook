@@ -18,6 +18,14 @@ public enum DayHistory {
         return calendar.date(byAdding: .day, value: -max(0, daysBack), to: today) ?? today
     }
 
+    /// How many days before today `date` falls, if the swipe can reach it (today … `maxDaysBack`).
+    public static func daysBack(of date: Date, from now: Date, calendar: Calendar = .current) -> Int? {
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date),
+                                           to: calendar.startOfDay(for: now)).day
+        guard let days, (0...maxDaysBack).contains(days) else { return nil }
+        return days
+    }
+
     /// The day (midnight) a record belongs to: its start date, else the date it was created on.
     public static func recordDay(_ period: DutyPeriod, calendar: Calendar = .current) -> Date {
         calendar.startOfDay(for: period.start ?? period.date)
@@ -53,6 +61,39 @@ public enum DayHistory {
     }
 }
 
+/// Why a time cannot be confirmed in a time sheet (F4). `.other` is a disabled case without approved copy.
+public enum TimeEntryIssue: Equatable {
+    case future
+    case endBeforeStart(start: Date)
+    /// `to` nil means the current (open) shift.
+    case overlap(from: Date, to: Date?)
+    case outsideDay(Date)
+    case other
+
+    /// Interim copy, plain and friendly; dates follow the device locale.
+    public func message(calendar: Calendar = .current) -> String? {
+        switch self {
+        case .future:
+            return "This time hasn't happened yet."
+        case .endBeforeStart(let start):
+            return "Day closed can\u{2019}t be before Day started (\(HomeTimeline.dayAndTime(start, calendar: calendar)))."
+        case .overlap(let from, let to):
+            let begin = HomeTimeline.dayAndTime(from, calendar: calendar)
+            guard let to else { return "This overlaps your current shift from \(begin)." }
+            return "This overlaps your shift from \(begin) to \(HomeTimeline.dayAndTime(to, calendar: calendar))."
+        case .outsideDay(let day):
+            return "Pick a time on \(HomeTimeline.weekdayAndDay(day, calendar: calendar))."
+        case .other:
+            return nil
+        }
+    }
+}
+
+/// A rest that covers a whole past day that has no shift (F3).
+public struct RestCoverNote: Equatable {
+    public var restStart: Date
+}
+
 /// Rest taken after a shift: next shift start minus this shift's end, or the time up to
 /// now while it is still running. Never classified as daily or weekly.
 public struct RestTaken: Equatable {
@@ -77,14 +118,22 @@ extension DayLogModel {
         state.history.map { ($0, false) } + [(state.current, isShiftOpen)]
     }
 
+    /// The earliest other record or the active shift that `start...end` collides with.
+    /// `to` is nil for the open shift.
+    func overlapBlocker(start: Date, end: Date, excluding id: UUID?, now: Date) -> (from: Date, to: Date?)? {
+        let span = (start: start, end: max(start, end))
+        let hits = allPeriods.compactMap { entry -> (from: Date, to: Date?)? in
+            guard entry.period.id != id,
+                  let other = DayHistory.interval(of: entry.period, isActive: entry.isActive, now: now),
+                  DayHistory.overlaps(span, other) else { return nil }
+            return (other.start, entry.isActive ? nil : other.end)
+        }
+        return hits.min { $0.from < $1.from }
+    }
+
     /// Whether `start...end` collides with any other record or the active shift.
     func overlapsOtherRecords(start: Date, end: Date, excluding id: UUID?, now: Date) -> Bool {
-        let span = (start: start, end: max(start, end))
-        return allPeriods.contains { entry in
-            guard entry.period.id != id,
-                  let other = DayHistory.interval(of: entry.period, isActive: entry.isActive, now: now) else { return false }
-            return DayHistory.overlaps(span, other)
-        }
+        overlapBlocker(start: start, end: end, excluding: id, now: now) != nil
     }
 
     /// The record shown for `day`. The open active shift belongs to Home today and is never a
@@ -115,11 +164,20 @@ extension DayLogModel {
     private func isCurrent(_ record: DutyPeriod?) -> Bool { record?.id == state.current.id }
 
     public func canSetStart(_ date: Date, onDay day: Date, now: Date, calendar: Calendar = .current) -> Bool {
-        guard storageError == nil, date <= now, calendar.isDate(date, inSameDayAs: day) else { return false }
+        checkSetStart(date, onDay: day, now: now, calendar: calendar) == nil
+    }
+
+    public func checkSetStart(_ date: Date, onDay day: Date, now: Date, calendar: Calendar = .current) -> TimeEntryIssue? {
+        guard storageError == nil else { return .other }
+        if date > now { return .future }
+        guard calendar.isDate(date, inSameDayAs: day) else { return .outsideDay(day) }
         let record = dayRecord(on: day, calendar: calendar)
-        if isCurrent(record) { return canEditDayStart(date, now: now) }
-        if let end = record?.end, date > end { return false }
-        return !overlapsOtherRecords(start: date, end: record?.end ?? date, excluding: record?.id, now: now)
+        if isCurrent(record) { return checkEditDayStart(date, now: now) }
+        if let end = record?.end, date > end { return .endBeforeStart(start: date) }
+        if let blocker = overlapBlocker(start: date, end: record?.end ?? date, excluding: record?.id, now: now) {
+            return .overlap(from: blocker.from, to: blocker.to)
+        }
+        return nil
     }
 
     public func setStart(_ date: Date, onDay day: Date, now: Date, calendar: Calendar = .current) {
@@ -138,12 +196,23 @@ extension DayLogModel {
     }
 
     public func canSetEnd(_ date: Date, onDay day: Date, now: Date, calendar: Calendar = .current) -> Bool {
-        guard storageError == nil, date <= now else { return false }
+        checkSetEnd(date, onDay: day, now: now, calendar: calendar) == nil
+    }
+
+    public func checkSetEnd(_ date: Date, onDay day: Date, now: Date, calendar: Calendar = .current) -> TimeEntryIssue? {
+        guard storageError == nil else { return .other }
+        if date > now { return .future }
         let record = dayRecord(on: day, calendar: calendar)
-        let floor = record?.start ?? calendar.startOfDay(for: day)
-        guard date >= floor else { return false }
-        if isCurrent(record) { return canEditDayEnd(date, now: now) }
-        return !overlapsOtherRecords(start: record?.start ?? date, end: date, excluding: record?.id, now: now)
+        if let start = record?.start {
+            if date < start { return .endBeforeStart(start: start) }
+        } else if date < calendar.startOfDay(for: day) {
+            return .outsideDay(day)
+        }
+        if isCurrent(record) { return checkEditDayEnd(date, now: now) }
+        if let blocker = overlapBlocker(start: record?.start ?? date, end: date, excluding: record?.id, now: now) {
+            return .overlap(from: blocker.from, to: blocker.to)
+        }
+        return nil
     }
 
     public func setEnd(_ date: Date, onDay day: Date, now: Date, calendar: Calendar = .current) {
@@ -177,5 +246,20 @@ extension DayLogModel {
             }
             journal.history.sortChronologically()
         }
+    }
+
+    // MARK: - Rest covering a whole past day (F3)
+
+    /// A note for a past `day` that has no shift record while one rest covers the whole calendar day:
+    /// it started on an earlier day and ended on a later day, or is still running. nil otherwise.
+    public func restCoverNote(onDay day: Date, now: Date, calendar: Calendar = .current) -> RestCoverNote? {
+        let target = calendar.startOfDay(for: day)
+        guard target < calendar.startOfDay(for: now), dayRecord(on: target, calendar: calendar) == nil,
+              let nextMidnight = calendar.date(byAdding: .day, value: 1, to: target) else { return nil }
+        let before = allPeriods.map(\.period).filter { ($0.end.map { $0 < target } ?? false) }
+        guard let last = before.max(by: { $0.end! < $1.end! }),
+              let rest = restTaken(after: last, now: now) else { return nil }
+        guard let restEnd = rest.end else { return RestCoverNote(restStart: rest.start) }
+        return restEnd >= nextMidnight ? RestCoverNote(restStart: rest.start) : nil
     }
 }
