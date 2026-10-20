@@ -97,6 +97,11 @@ public final class DayLogModel {
                 }
             } else if args.contains("-seedNearDutyLimit"), model.isEmpty {
                 model.setDayStart(Date().addingTimeInterval(-(14 * 3600 + 45 * 60)))
+            } else if let index = args.firstIndex(of: "-seedReducedRests"), index + 1 < args.count,
+                      let used = Int(args[index + 1]), model.isEmpty {
+                // Weekly rest, `used` reduced rests, then the current rest: daily (1 min) or weekly card (12 h).
+                let restElapsed: TimeInterval = args.contains("-seedWeeklyCard") ? 12 * 3600 : 60
+                model.seedReducedRestsIfEmpty(used: used, restElapsed: restElapsed, now: Date())
             } else if args.contains("-seedDailyRestNearEleven"), model.isEmpty {
                 // A daily rest 20 s short of 11 h, to watch it switch to the weekly card.
                 let now = Date()
@@ -128,6 +133,31 @@ public final class DayLogModel {
     public func seedArchivedShiftIfEmpty(start: Date, end: Date) {
         guard isEmpty, start <= end else { return }
         update { $0.history = [DutyPeriod(date: start, start: start, end: end, isClosed: true)] }
+    }
+
+    /// Records for the Rest Count row: a shift and a 46 h weekly rest, then `used` days of 12 h duty with a
+    /// 10 h (reduced) rest, then the current shift closed `restElapsed` before `now`. Never replaces stored data.
+    public func seedReducedRestsIfEmpty(used: Int, restElapsed: TimeInterval, now: Date) {
+        guard isEmpty, used >= 0 else { return }
+        let hour: TimeInterval = 3600
+        let restStart = now.addingTimeInterval(-restElapsed)
+        let currentStart = restStart.addingTimeInterval(-3 * hour)
+        var periods: [DutyPeriod] = []
+        var nextStart = currentStart
+        func prepend(start: Date, duty: TimeInterval, kind: RestKind) {
+            let end = start.addingTimeInterval(duty)
+            periods.insert(DutyPeriod(date: start, start: start, drivingMinutes: 480, end: end, isClosed: true,
+                                      rests: [RestSegment(start: end, end: nextStart, dailyRestConfirmed: true, kind: kind)]),
+                           at: 0)
+            nextStart = start
+        }
+        for _ in 0..<used { prepend(start: nextStart.addingTimeInterval(-22 * hour), duty: 12 * hour, kind: .daily) }
+        prepend(start: nextStart.addingTimeInterval(-54 * hour), duty: 8 * hour, kind: .weekly)
+        update { journal in
+            journal.history = periods
+            journal.current = DutyPeriod(date: currentStart, start: currentStart, drivingMinutes: 128, end: restStart,
+                                         isClosed: true, rests: [RestSegment(start: restStart, kind: .daily)])
+        }
     }
 
     public func seedWeeklyRestIfEmpty(shiftStart: Date, restStart: Date, drivingMinutes: Int) {

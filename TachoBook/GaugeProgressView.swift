@@ -12,16 +12,31 @@ public struct GaugeProgressView: View {
     public var progress: Double // 0.0 to 1.0
     public var tint: Color
     public var warning: String?
+    /// Figma "Rest Count" under the arc; nil hides the row (count unknown, or not a rest gauge).
+    public var reducedRestsUsed: Int?
 
-    public init(limit: String, value: String, progress: Double, tint: Color, warning: String? = nil) {
+    public init(limit: String, value: String, progress: Double, tint: Color, warning: String? = nil,
+                reducedRestsUsed: Int? = nil) {
         self.limit = limit
         self.value = value
         self.progress = progress
         self.tint = tint
         self.warning = warning
+        self.reducedRestsUsed = reducedRestsUsed
     }
 
     public var body: some View {
+        // The bed row is its own accessibility element, outside the combined gauge label.
+        ZStack(alignment: .bottom) {
+            gauge
+            if let reducedRestsUsed {
+                ReducedRestRow(used: reducedRestsUsed)
+            }
+        }
+        .frame(width: 169, height: 161)
+    }
+
+    private var gauge: some View {
         ZStack(alignment: .top) {
             GaugeArc()
                 .stroke(Color.tachoGaugeTrack, style: StrokeStyle(lineWidth: 21, lineCap: .round))
@@ -67,6 +82,34 @@ public struct GaugeProgressView: View {
         .frame(width: 169, height: 161)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("homeGauge")
+    }
+}
+
+/// Figma "Rest Count": three 18 × 20 beds, 8 pt apart, on the gauge's bottom edge.
+/// Red beds (left) are reductions used, blue beds are still available. Not interactive.
+struct ReducedRestRow: View {
+    var used: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<ReducedRestCounter.limit, id: \.self) { index in
+                Image("RestCountIcon")
+                    .resizable()
+                    .renderingMode(.template)
+                    .frame(width: 18, height: 19.983)
+                    .foregroundStyle(index < used ? Color.tachoRed : Color.tachoBlue)
+            }
+        }
+        .offset(x: 0.5)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.label(used: used))
+        .accessibilityIdentifier("reducedRestCount")
+    }
+
+    static func label(used: Int) -> String {
+        used > ReducedRestCounter.limit
+            ? "\(used) reduced rests used, limit \(ReducedRestCounter.limit)"
+            : "\(used) of \(ReducedRestCounter.limit) reduced rests used"
     }
 }
 

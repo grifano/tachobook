@@ -233,7 +233,7 @@ public struct DashboardView: View {
                     limit: "\(kind.requiredHours)h",
                     value: HomeTimeline.clockDuration(seconds: elapsed),
                     progress: Double(elapsed) / (Double(kind.requiredHours) * 3600),
-                    tint: .tachoBlue),
+                    tint: .tachoBlue, reducedRestsUsed: model.reducedRestsUsed),
                 limits: [
                     HomeLimit(label: "After \(kind.milestoneHours.first)h rest",
                               value: HomeTimeline.clockLabel(milestones.first, relativeTo: now)),
