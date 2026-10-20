@@ -22,7 +22,8 @@ Figma: [Main widget — Weekly Rest, 490:26367](https://www.figma.com/design/rpZ
 | Unknown (R-U01, P2) | No completed rest ≥ 24 h in the records, or a record after it without Day started or Day closed: unknown, never 0. Records with no times (only driving) are ignored. |
 | 13 / 15 h (R-D05) | `DayLogModel.dutyLimitAvailability`: 15 h when the count is 0–2 or a confirmed split-first pause ≥ 3 h exists; 13 h only at count ≥ 3 without a split; unknown otherwise (also with count ≥ 3 and an unconfirmed long pause). Exposed for the Work card markers and the Resume flow; the marker visuals are unchanged. |
 | Edits (R-E01) | The count is derived from the saved records on every read, so any history edit and any relaunch recompute it. |
-| Pending reduction (decisions 12–13, 20.10.2026) | Today's Work card shows the bed row only once the current shift's duty (Day started to now, or to Day closed while resting) is past 13 h (13:00 no, 13:01 yes) and it has no confirmed split-first pause ≥ 3 h: an 11 h rest can no longer fit in the window. Red beds = completed count + 1, never a fourth bed (count 3 stays 3). Hidden while the count is unknown. The stored count still changes only when the rest ends. A history edit back to ≤ 13 h removes the row. Also removed once a running rest reaches 24 h (it will end as a weekly rest). The Rest card keeps the completed count. |
+| Pending reduction (decisions 12–13, 20.10.2026) | Today's Work card shows the bed row only once the current shift's duty (Day started to now, or to Day closed while resting) is past 13 h (13:00 no, 13:01 yes) and it has no confirmed split-first pause ≥ 3 h: an 11 h rest can no longer fit in the window. Red beds = completed count + 1, never a fourth bed (count 3 stays 3). Hidden while the count is unknown. The stored count still changes only when the rest ends. A history edit back to ≤ 13 h removes the row. Also removed once a running rest reaches 24 h (it will end as a weekly rest). |
+| Rest card during the rest (Serhii, 20.10.2026) | After a shift past 13 h the Rest card shows the same pending bed at once. After a shift of 13 h or less (for example 12 h, then a 9 h rest) the bed turns red only when the rest ends. |
 
 ## Screenshots (iPhone 17 Pro, 402 pt; and 390 pt)
 
@@ -40,6 +41,8 @@ Work card (completed count 1), no Figma frame:
 |---|---|---|
 | ![](work-12h59-402.jpg) | ![](work-13h30-402.jpg) | ![](work-14h30-402.jpg) |
 | ![](work-12h59-390.jpg) | ![](work-13h30-390.jpg) | ![](work-14h30-390.jpg) |
+
+Rest card, completed count 1: after a 14 h shift (pending bed) `rest-after-14h-402.jpg`; after a 12 h shift (no pending bed) `rest-after-12h-402.jpg`.
 
 Open: at accessibility text sizes the last-hour warning ("00:30") grows past the arc and, at the largest size, covers the beds: `work-14h30-axL-402.jpg`, `work-14h30-axXXXL-402.jpg`. No layout was invented (decision 13); awaiting Serhii's decision.
 

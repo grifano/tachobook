@@ -273,6 +273,24 @@ struct ReducedRestCounterTests {
         #expect(model.reducedRestsUsed == 1)
     }
 
+    @Test func restCardShowsThePendingBedOnlyAfterAShiftPastThirteenHours() {
+        // 14 h shift: red already during the rest.
+        let long = openShiftModel(used: 1)
+        long.closeShift(at: date(12, 20))
+        #expect(long.restCardReducedRests(now: date(12, 21)) == 2)
+        #expect(long.reducedRestsUsed == 1)
+        // 12 h shift, then a 9 h rest: red only once the rest has ended.
+        let short = openShiftModel(used: 1)
+        short.closeShift(at: date(12, 18))
+        #expect(short.restCardReducedRests(now: date(13, 3)) == 1)
+        short.startShift(at: date(13, 3), now: date(13, 3))
+        #expect(short.reducedRestsUsed == 2)
+        // Unknown count: still hidden.
+        let unknown = openShiftModel(used: nil)
+        unknown.closeShift(at: date(12, 20))
+        #expect(unknown.restCardReducedRests(now: date(12, 21)) == nil)
+    }
+
     @Test func aRunningRestOfTwentyFourHoursEndsThePendingBed() {
         let model = openShiftModel(used: 2)
         model.closeShift(at: date(12, 20))

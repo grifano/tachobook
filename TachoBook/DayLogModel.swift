@@ -101,10 +101,14 @@ public final class DayLogModel {
                       let used = Int(args[index + 1]), model.isEmpty {
                 // Weekly rest, `used` reduced rests, then the current rest: daily (1 min) or weekly card (12 h).
                 // `-seedOpenShiftMinutes M`: instead, a shift still open M minutes after its start.
+                // `-seedDutyMinutes M`: the closed shift before the current rest lasted M minutes (default 3 h).
                 let restElapsed: TimeInterval = args.contains("-seedWeeklyCard") ? 12 * 3600 : 60
-                let open = args.firstIndex(of: "-seedOpenShiftMinutes").flatMap { $0 + 1 < args.count ? Int(args[$0 + 1]) : nil }
+                func minutes(_ flag: String) -> TimeInterval? {
+                    args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? Int(args[$0 + 1]) : nil }.map { TimeInterval($0) * 60 }
+                }
                 model.seedReducedRestsIfEmpty(used: used, restElapsed: restElapsed, now: Date(),
-                                              openShiftElapsed: open.map { TimeInterval($0) * 60 })
+                                              openShiftElapsed: minutes("-seedOpenShiftMinutes"),
+                                              closedShiftDuty: minutes("-seedDutyMinutes") ?? 3 * 3600)
             } else if args.contains("-seedDailyRestNearEleven"), model.isEmpty {
                 // A daily rest 20 s short of 11 h, to watch it switch to the weekly card.
                 let now = Date()
@@ -142,11 +146,11 @@ public final class DayLogModel {
     /// 10 h (reduced) rest, then the current shift closed `restElapsed` before `now` — or, with
     /// `openShiftElapsed`, still open and started that long before `now`. Never replaces stored data.
     public func seedReducedRestsIfEmpty(used: Int, restElapsed: TimeInterval, now: Date,
-                                        openShiftElapsed: TimeInterval? = nil) {
+                                        openShiftElapsed: TimeInterval? = nil, closedShiftDuty: TimeInterval = 3 * 3600) {
         guard isEmpty, used >= 0 else { return }
         let hour: TimeInterval = 3600
         let restStart = now.addingTimeInterval(-restElapsed)
-        let currentStart = openShiftElapsed.map { now.addingTimeInterval(-$0) } ?? restStart.addingTimeInterval(-3 * hour)
+        let currentStart = openShiftElapsed.map { now.addingTimeInterval(-$0) } ?? restStart.addingTimeInterval(-closedShiftDuty)
         var periods: [DutyPeriod] = []
         var nextStart = currentStart
         func prepend(start: Date, duty: TimeInterval, kind: RestKind) {

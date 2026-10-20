@@ -39,6 +39,22 @@ final class RestCountUITests: XCTestCase {
     }
 
     @MainActor
+    func testRestCardShowsThePendingBedAfterAShiftPastThirteenHours() {
+        // 14 h shift closed a minute ago: the reduction already shows during the rest.
+        let long = launch(["-resetHomeFlowTest", "-seedReducedRests", "1", "-seedDutyMinutes", "840"])
+        XCTAssertTrue(long.staticTexts["Rest Time"].waitForExistence(timeout: 5))
+        XCTAssertEqual(long.descendants(matching: .any)["reducedRestCount"].label, "2 of 3 reduced rests used")
+        attach("rest after 14h shift, pending bed")
+        long.terminate()
+
+        // 12 h shift: the bed turns red only when the rest ends.
+        let short = launch(["-resetHomeFlowTest", "-seedReducedRests", "1", "-seedDutyMinutes", "720"])
+        XCTAssertTrue(short.staticTexts["Rest Time"].waitForExistence(timeout: 5))
+        XCTAssertEqual(short.descendants(matching: .any)["reducedRestCount"].label, "1 of 3 reduced rests used")
+        attach("rest after 12h shift, no pending bed")
+    }
+
+    @MainActor
     func testBedsAreHiddenWithoutACompletedWeeklyRest() {
         // The only record is a running rest: the count is unknown, never shown as 0 used.
         let app = launch(["-resetHomeFlowTest", "-seedReadyWeeklyRest"])

@@ -120,7 +120,7 @@ public enum ReducedRestCounter {
         return !pauses(of: period).contains { isSplitFirst($0, anchor: anchor) }
     }
 
-    /// Beds shown red on the Work card: the completed count plus the pending reduction, never a fourth bed.
+    /// Beds shown red for the current shift: the completed count plus the pending reduction, never a fourth bed.
     /// nil hides the row (count unknown, or no reduction pending). The stored count is unchanged.
     public static func workCardCount(used: Int?, period: DutyPeriod, now: Date) -> Int? {
         guard let used, isReductionPending(period: period, now: now) else { return nil }
@@ -151,6 +151,12 @@ extension DayLogModel {
     /// 13 h already makes certain; nil hides the row (decisions 12–13). Follows history edits (R-E01).
     public func workCardReducedRests(now: Date) -> Int? {
         ReducedRestCounter.workCardCount(used: reducedRestsUsed, period: state.current, now: now)
+    }
+
+    /// Red beds for the Rest card: during the rest after a shift past 13 h the reduction is already shown
+    /// (Serhii, 20.10.2026); otherwise the completed count, which changes when the rest ends. nil hides the row.
+    public func restCardReducedRests(now: Date) -> Int? {
+        workCardReducedRests(now: now) ?? reducedRestsUsed
     }
 
     /// 13 vs 15 h for the current duty period (R-D05), for the Work card markers and the Resume flow.
