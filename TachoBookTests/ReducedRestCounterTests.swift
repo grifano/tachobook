@@ -202,6 +202,84 @@ struct ReducedRestCounterTests {
         #expect(ReducedRestRow.label(used: 4) == "4 reduced rests used, limit 3")
     }
 
+    // MARK: - Pending reduction on the Work card (decisions 12–13)
+
+    /// A model with a weekly rest, `used` reduced rests and an open shift from 12.10 06:00.
+    private func openShiftModel(used: Int?, pauses: [RestSegment] = []) -> DayLogModel {
+        let anchor = date(12, 6)
+        let model = DayLogModel(date: anchor)
+        model.update { journal in
+            journal.history = used.map { history(used: $0, endingAt: anchor) } ?? [period(date(11, 6), date(11, 18))]
+            journal.current = period(anchor, pauses: pauses)
+        }
+        return model
+    }
+
+    @Test func thirteenHoursExactlyShowsNoPendingBed() {
+        let model = openShiftModel(used: 1)
+        #expect(model.workCardReducedRests(now: date(12, 19)) == nil)
+        #expect(model.workCardReducedRests(now: date(12, 18, 59)) == nil)
+    }
+
+    @Test func thirteenOhOneShowsOneMoreRedBed() {
+        let model = openShiftModel(used: 1)
+        #expect(model.workCardReducedRests(now: date(12, 19, 1)) == 2)
+        // The stored count is unchanged until the rest ends.
+        #expect(model.reducedRestsUsed == 1)
+    }
+
+    @Test func confirmedSplitFirstPauseMeansNoPendingBed() {
+        let model = openShiftModel(used: 1, pauses: [pause(date(12, 10), date(12, 13))])
+        #expect(model.workCardReducedRests(now: date(12, 19, 1)) == nil)
+        // An unconfirmed pause does not prevent it.
+        let unconfirmed = openShiftModel(used: 1, pauses: [pause(date(12, 10), date(12, 13), confirmed: nil)])
+        #expect(unconfirmed.workCardReducedRests(now: date(12, 19, 1)) == 2)
+    }
+
+    @Test func completedCountThreeAddsNoFourthBed() {
+        let model = openShiftModel(used: 3)
+        #expect(model.workCardReducedRests(now: date(12, 19, 1)) == 3)
+    }
+
+    @Test func unknownCountHidesTheWorkCardRow() {
+        let model = openShiftModel(used: nil)
+        #expect(model.reducedRestsUsed == nil)
+        #expect(model.workCardReducedRests(now: date(12, 20)) == nil)
+    }
+
+    @Test func historyEditBackToThirteenHoursRemovesThePendingBed() {
+        let model = openShiftModel(used: 0)
+        let now = date(12, 20)
+        #expect(model.workCardReducedRests(now: now) == 1)
+        // Day started corrected from 06:00 to 07:00: 13 h of duty at 20:00, no longer past 13 h.
+        model.editDayStart(date(12, 7), now: now)
+        #expect(model.dayStart == date(12, 7))
+        #expect(model.workCardReducedRests(now: now) == nil)
+    }
+
+    @Test func closedShiftKeepsThePendingBedUntilTheRestEnds() {
+        let model = openShiftModel(used: 0)
+        model.closeShift(at: date(12, 20))
+        // Work tab while resting: duty is judged at its close time.
+        #expect(model.workCardReducedRests(now: date(13, 2)) == 1)
+        #expect(model.reducedRestsUsed == 0)
+        // Day closed corrected to 19:00: duty 13 h, no pending bed.
+        model.editDayEnd(date(12, 19), now: date(13, 2))
+        #expect(model.workCardReducedRests(now: date(13, 2)) == nil)
+        // Back to 20:00; the rest then ends at 05:00 (9 h in the window): the pending bed became the stored count.
+        model.editDayEnd(date(12, 20), now: date(13, 2))
+        #expect(model.workCardReducedRests(now: date(13, 2)) == 1)
+        model.startShift(at: date(13, 5), now: date(13, 5))
+        #expect(model.reducedRestsUsed == 1)
+    }
+
+    @Test func aRunningRestOfTwentyFourHoursEndsThePendingBed() {
+        let model = openShiftModel(used: 2)
+        model.closeShift(at: date(12, 20))
+        #expect(model.workCardReducedRests(now: date(13, 19, 59)) == 3)
+        #expect(model.workCardReducedRests(now: date(13, 20)) == nil)
+    }
+
     // MARK: - Model: history edits (R-E01) and relaunch
 
     @Test func editingAPastDayRecomputesTheCount() throws {

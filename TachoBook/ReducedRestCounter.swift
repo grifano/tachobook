@@ -106,6 +106,27 @@ public enum ReducedRestCounter {
         return nil
     }
 
+    /// Duty past which an 11 h rest no longer fits in the 24 h window (owner decision 12, 20.10.2026).
+    static let pendingAfter: TimeInterval = 13 * 3600
+
+    /// Whether the rest after `period` is already certain to be reduced (or a deviation): its duty
+    /// (start to close, or to `now` while open) is past 13 h and it has no confirmed split-first pause.
+    /// Not once a running rest has reached 24 h: it will then end as a weekly rest.
+    public static func isReductionPending(period: DutyPeriod, now: Date) -> Bool {
+        guard let anchor = period.start else { return false }
+        let close = period.end ?? now
+        guard close.timeIntervalSince(anchor) > pendingAfter else { return false }
+        if period.end != nil, now.timeIntervalSince(close) >= weeklyRest { return false }
+        return !pauses(of: period).contains { isSplitFirst($0, anchor: anchor) }
+    }
+
+    /// Beds shown red on the Work card: the completed count plus the pending reduction, never a fourth bed.
+    /// nil hides the row (count unknown, or no reduction pending). The stored count is unchanged.
+    public static func workCardCount(used: Int?, period: DutyPeriod, now: Date) -> Int? {
+        guard let used, isReductionPending(period: period, now: now) else { return nil }
+        return used >= limit ? used : used + 1
+    }
+
     /// R-D05 for the daily period anchored at `period.start`.
     public static func availability(used: Int?, period: DutyPeriod) -> DutyLimitAvailability {
         guard let anchor = period.start else { return .unknown }
@@ -125,6 +146,12 @@ extension DayLogModel {
     /// Reduced daily rests used since the last completed weekly rest; nil while unknown (R-U01, P2).
     /// Derived from saved records, so it follows every history edit (R-E01) and relaunch.
     public var reducedRestsUsed: Int? { ReducedRestCounter.usedCount(periods: countedPeriods) }
+
+    /// Red beds for the Work card of the current shift: the count including the reduction its duty past
+    /// 13 h already makes certain; nil hides the row (decisions 12–13). Follows history edits (R-E01).
+    public func workCardReducedRests(now: Date) -> Int? {
+        ReducedRestCounter.workCardCount(used: reducedRestsUsed, period: state.current, now: now)
+    }
 
     /// 13 vs 15 h for the current duty period (R-D05), for the Work card markers and the Resume flow.
     public var dutyLimitAvailability: DutyLimitAvailability {

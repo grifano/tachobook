@@ -22,6 +22,7 @@ Figma: [Main widget — Weekly Rest, 490:26367](https://www.figma.com/design/rpZ
 | Unknown (R-U01, P2) | No completed rest ≥ 24 h in the records, or a record after it without Day started or Day closed: unknown, never 0. Records with no times (only driving) are ignored. |
 | 13 / 15 h (R-D05) | `DayLogModel.dutyLimitAvailability`: 15 h when the count is 0–2 or a confirmed split-first pause ≥ 3 h exists; 13 h only at count ≥ 3 without a split; unknown otherwise (also with count ≥ 3 and an unconfirmed long pause). Exposed for the Work card markers and the Resume flow; the marker visuals are unchanged. |
 | Edits (R-E01) | The count is derived from the saved records on every read, so any history edit and any relaunch recompute it. |
+| Pending reduction (decisions 12–13, 20.10.2026) | Today's Work card shows the bed row only once the current shift's duty (Day started to now, or to Day closed while resting) is past 13 h (13:00 no, 13:01 yes) and it has no confirmed split-first pause ≥ 3 h: an 11 h rest can no longer fit in the window. Red beds = completed count + 1, never a fourth bed (count 3 stays 3). Hidden while the count is unknown. The stored count still changes only when the rest ends. A history edit back to ≤ 13 h removes the row. Also removed once a running rest reaches 24 h (it will end as a weekly rest). The Rest card keeps the completed count. |
 
 ## Screenshots (iPhone 17 Pro, 402 pt; and 390 pt)
 
@@ -33,6 +34,15 @@ Figma: [Main widget — Weekly Rest, 490:26367](https://www.figma.com/design/rpZ
 
 390 pt: `weekly-1-used-390.jpg`, `daily-0-used-390.jpg`, `hidden-unknown-390.jpg`.
 
+Work card (completed count 1), no Figma frame:
+
+| 12:59 — no row | 13:30 — pending bed | 14:30 — with the last-hour warning |
+|---|---|---|
+| ![](work-12h59-402.jpg) | ![](work-13h30-402.jpg) | ![](work-14h30-402.jpg) |
+| ![](work-12h59-390.jpg) | ![](work-13h30-390.jpg) | ![](work-14h30-390.jpg) |
+
+Open: at accessibility text sizes the last-hour warning ("00:30") grows past the arc and, at the largest size, covers the beds: `work-14h30-axL-402.jpg`, `work-14h30-axXXXL-402.jpg`. No layout was invented (decision 13); awaiting Serhii's decision.
+
 ## Debug launch arguments (UI tests and screenshots)
 
-`-homeFlowUITest -resetHomeFlowTest -seedReducedRests N` seeds a completed 46 h weekly rest, N reduced rests (12 h duty, 10 h rest) and a current daily rest of 1 min; add `-seedWeeklyCard` for a rest of 12 h (weekly card).
+`-homeFlowUITest -resetHomeFlowTest -seedReducedRests N` seeds a completed 46 h weekly rest, N reduced rests (12 h duty, 10 h rest) and a current daily rest of 1 min; add `-seedWeeklyCard` for a rest of 12 h (weekly card), or `-seedOpenShiftMinutes M` for a shift still open M minutes after its start (Work card).

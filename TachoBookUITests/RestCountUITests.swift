@@ -49,9 +49,41 @@ final class RestCountUITests: XCTestCase {
     }
 
     @MainActor
+    func testWorkCardShowsThePendingBedOnlyAfterThirteenHours() {
+        // 12:59 of duty: no bed row on the Work card.
+        let before = launch(["-resetHomeFlowTest", "-seedReducedRests", "1", "-seedOpenShiftMinutes", "779"])
+        XCTAssertTrue(before.staticTexts["Work Time"].waitForExistence(timeout: 5))
+        XCTAssertFalse(before.descendants(matching: .any)["reducedRestCount"].exists)
+        attach("work 12h59, no beds")
+        before.terminate()
+
+        // 13:30: the reduction is certain, one more bed is red than the completed count.
+        let after = launch(["-resetHomeFlowTest", "-seedReducedRests", "1", "-seedOpenShiftMinutes", "810"])
+        XCTAssertTrue(after.staticTexts["Work Time"].waitForExistence(timeout: 5))
+        let beds = after.descendants(matching: .any)["reducedRestCount"]
+        XCTAssertTrue(beds.waitForExistence(timeout: 5))
+        XCTAssertEqual(beds.label, "2 of 3 reduced rests used")
+        attach("work 13h30, pending bed")
+        after.terminate()
+
+        // 14:30: together with the last-hour warning (00:30 left), checked on the screenshots
+        // (the warning is part of the combined gauge element, so it has no frame of its own).
+        for size in ["UICTContentSizeCategoryL", "UICTContentSizeCategoryXXXL", "UICTContentSizeCategoryAccessibilityL"] {
+            let warning = launch(["-resetHomeFlowTest", "-seedReducedRests", "1", "-seedOpenShiftMinutes", "870"], size: size)
+            XCTAssertTrue(warning.staticTexts["Work Time"].waitForExistence(timeout: 5))
+            XCTAssertTrue(warning.descendants(matching: .any)["reducedRestCount"].waitForExistence(timeout: 5))
+            let gauge = warning.descendants(matching: .any)["homeGauge"]
+            XCTAssertTrue(gauge.label.contains("00:30"), gauge.label)
+            attach("work 14h30, pending bed and warning, \(size)")
+            warning.terminate()
+        }
+    }
+
+    @MainActor
     func testAccessibilityAuditWithBeds() throws {
         for (args, title) in [(["-seedReducedRests", "2", "-seedWeeklyCard"], "Weekly Rest"),
-                              (["-seedReducedRests", "3"], "Rest Time")] {
+                              (["-seedReducedRests", "3"], "Rest Time"),
+                              (["-seedReducedRests", "1", "-seedOpenShiftMinutes", "870"], "Work Time")] {
             let app = launch(["-resetHomeFlowTest"] + args)
             XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
             XCTAssertTrue(app.descendants(matching: .any)["reducedRestCount"].waitForExistence(timeout: 5))
@@ -69,9 +101,9 @@ final class RestCountUITests: XCTestCase {
     }
 
     @MainActor
-    private func launch(_ extra: [String]) -> XCUIApplication {
+    private func launch(_ extra: [String], size: String = "UICTContentSizeCategoryL") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-homeFlowUITest", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"] + extra
+        app.launchArguments = ["-homeFlowUITest", "-UIPreferredContentSizeCategoryName", size] + extra
         app.launch()
         return app
     }
