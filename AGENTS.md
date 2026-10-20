@@ -36,6 +36,7 @@ Use the local `figma-desktop` MCP server whenever implementation depends on Figm
 This repository-root `AGENTS.md` is the shared source of development rules for Codex and Claude Code. Keep it versioned with the code. `CLAUDE.md` imports it; do not maintain a second copy of these rules outside the repository.
 
 - Notion is the source of truth for approved product specifications, task scope, and acceptance criteria. Read the assigned task and linked approved specification before implementation.
+- Where things live in Notion: the product page is [P-003 — TachoBook](https://app.notion.com/p/3f2db41bd74b81779c04f92e100e0c15) in Product Design → Product Ideas. All tasks live in the single Backlog → Tasks database; TachoBook tasks are the ones whose `Product` relation is `P-003 — TachoBook` (the old `Project` select and `Area` fields no longer exist).
 - Figma is the visual source of truth when a task affects UI.
 - Serhii makes final product decisions and approves merging work.
 - Work only on the assigned task. If a task contains an explicit restriction such as "do not commit or push", honor it and resolve the conflict with Serhii before publishing; this default workflow does not silently cancel task-specific restrictions.
