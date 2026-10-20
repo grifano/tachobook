@@ -143,13 +143,24 @@ struct HomeFlowTests {
     @Test func todayInTheWeekStripMovesAtLocalMidnight() throws {
         let beforeMidnight = date(18, 23, 59).addingTimeInterval(59)
         let afterMidnight = date(19, 0, 0)
-        let before = HomeTimeline.weekStrip(around: beforeMidnight, calendar: calendar)
-        let after = HomeTimeline.weekStrip(around: afterMidnight, calendar: calendar)
-        #expect(before.map(\.offset) == [-2, -1, 0, 1, 2])
+        let before = HomeTimeline.dateStrip(today: beforeMidnight, calendar: calendar)
+        let after = HomeTimeline.dateStrip(today: afterMidnight, calendar: calendar)
+        // maxDaysBack (3) days before today, today and tomorrow: the strip never re-centres.
+        #expect(before.map(\.offset) == [-3, -2, -1, 0, 1])
         #expect(before.filter(\.isToday).map(\.date) == [date(18, 0, 0)])
         #expect(after.filter(\.isToday).map(\.date) == [date(19, 0, 0)])
-        #expect(before.first?.date == date(16, 0, 0))
-        #expect(after.last?.date == date(21, 0, 0))
+        #expect(before.first?.date == date(15, 0, 0))
+        #expect(after.first?.date == date(16, 0, 0))
+        #expect(after.last?.date == date(20, 0, 0))
+    }
+
+    @Test func theStripLayoutFollowsTheHistoryDepth() {
+        let now = date(18, 12, 0)
+        #expect(DayHistory.maxDaysBack == 3)
+        #expect(HomeTimeline.dateStrip(today: now, calendar: calendar).map(\.offset) == [-3, -2, -1, 0, 1])
+        #expect(HomeTimeline.dateStrip(today: now, daysBack: 2, calendar: calendar).map(\.offset) == [-2, -1, 0, 1, 2])
+        #expect(HomeTimeline.dateStrip(today: now, daysBack: 4, calendar: calendar).map(\.offset) == [-4, -3, -2, -1, 0])
+        #expect(HomeTimeline.dateStrip(today: now, daysBack: 9, calendar: calendar).count == 5, "never wider than the strip")
     }
 
     // MARK: - Daily rest shown as weekly from 11 h (review round 3)

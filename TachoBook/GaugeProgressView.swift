@@ -38,13 +38,15 @@ public struct GaugeProgressView: View {
                     .frame(width: 60, height: 1)
                 Text(value)
                     .font(.largeTitle)
+                    // Thin "--:--" and "?" placeholders need a heavier stroke to stay legible.
+                    .fontWeight(["--:--", "?"].contains(value) ? .black : nil)
                     .tracking(0.4)
                     .frame(height: 41)
             }
             .monospacedDigit()
             .lineLimit(1)
             .minimumScaleFactor(0.5)
-            .foregroundStyle(Color.tachoDark)
+            .foregroundStyle(Color.tachoTextOnLight)
             .frame(width: 96)
             .padding(.top, 51)
 
@@ -55,7 +57,7 @@ public struct GaugeProgressView: View {
                     .labelStyle(TightLabelStyle())
                     .font(.footnote.weight(.semibold))
                     .monospacedDigit()
-                    .foregroundStyle(TachoTheme.warningText)
+                    .foregroundStyle(Color.tachoTextOnLight)
                     .fixedSize()
                     .frame(width: 169)
                     .padding(.top, 115)

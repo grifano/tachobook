@@ -42,16 +42,20 @@ public struct TimeEntrySheet: View {
     }
 
     var kind: Kind
-    var isValid: (Date) -> Bool
+    /// Limits the picker, e.g. to the day being edited; nil leaves it open.
+    var range: ClosedRange<Date>?
+    /// nil when the time can be confirmed, else why not (shown under the picker).
+    var check: (Date) -> TimeEntryIssue?
     var onConfirm: (Date) -> Void
     var onCancel: () -> Void
 
     @State private var date: Date
 
-    public init(kind: Kind, initialDate: Date, isValid: @escaping (Date) -> Bool,
+    public init(kind: Kind, initialDate: Date, range: ClosedRange<Date>? = nil, check: @escaping (Date) -> TimeEntryIssue?,
                 onConfirm: @escaping (Date) -> Void, onCancel: @escaping () -> Void) {
         self.kind = kind
-        self.isValid = isValid
+        self.range = range
+        self.check = check
         self.onConfirm = onConfirm
         self.onCancel = onCancel
         _date = State(initialValue: initialDate)
@@ -59,24 +63,47 @@ public struct TimeEntrySheet: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            SheetToolbar(title: kind.title, subtitle: kind.subtitle, canConfirm: isValid(date),
+            SheetToolbar(title: kind.title, subtitle: kind.subtitle, canConfirm: check(date) == nil,
                          onCancel: onCancel, onConfirm: { onConfirm(date) })
             VStack(spacing: 16) {
                 SheetSymbol(image: kind.icon, height: kind.iconHeight)
-                DatePicker(kind.title, selection: $date, displayedComponents: [.date, .hourAndMinute])
+                picker
                     .datePickerStyle(.compact)
                     .labelsHidden()
                     .accessibilityIdentifier("sheetDatePicker")
+                // Why Confirm is disabled; sits below the picker so the picker never moves.
+                let reason = check(date)?.message()
+                if let reason {
+                    Text(reason)
+                        .font(.footnote)
+                        .foregroundStyle(Color.tachoTextOnLight)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 24)
+                        .accessibilityIdentifier("sheetReason")
+                        .transition(.opacity)
+                }
             }
             .padding(.top, 59)
+            .animation(.default, value: check(date)?.message())
             Spacer(minLength: 24)
         }
-        .foregroundStyle(Color.tachoDark)
+        .foregroundStyle(Color.tachoTextOnLight)
         .environment(\.colorScheme, .light)
         .presentationDetents([.height(387)])
         .presentationDragIndicator(.hidden)
         .presentationBackground {
             Rectangle().fill(Color(red: 245/255, green: 245/255, blue: 245/255).opacity(0.94))
+        }
+    }
+}
+
+extension TimeEntrySheet {
+    @ViewBuilder fileprivate var picker: some View {
+        if let range {
+            DatePicker(kind.title, selection: $date, in: range, displayedComponents: [.date, .hourAndMinute])
+        } else {
+            DatePicker(kind.title, selection: $date, displayedComponents: [.date, .hourAndMinute])
         }
     }
 }
@@ -101,7 +128,7 @@ struct SheetToolbar: View {
                 Button(action: onCancel) {
                     Image(systemName: "xmark")
                         .font(.body.weight(.medium))
-                        .foregroundStyle(Color.tachoDark)
+                        .foregroundStyle(Color.tachoTextOnLight)
                         .frame(width: 44, height: 44)
                         .background(TachoTheme.sheetCloseFill, in: Circle())
                 }
@@ -111,11 +138,11 @@ struct SheetToolbar: View {
                 VStack(spacing: 0) {
                     Text(title)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.tachoDark)
+                        .foregroundStyle(Color.tachoTextOnLight)
                         .accessibilityAddTraits(.isHeader)
                     Text(subtitle)
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(TachoTheme.sheetSubtitle)
+                        .foregroundStyle(Color.tachoTextOnLight)
                 }
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -124,7 +151,7 @@ struct SheetToolbar: View {
                 Button(action: onConfirm) {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.tachoTextOnDark)
                         .frame(width: 44, height: 44)
                         .background(canConfirm ? Color.tachoOrange : TachoTheme.controlFill, in: Circle())
                 }

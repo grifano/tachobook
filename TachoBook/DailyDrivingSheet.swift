@@ -32,7 +32,7 @@ public struct DailyDrivingSheet: View {
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
-                    .foregroundStyle(Color.tachoDark)
+                    .foregroundStyle(Color.tachoTextOnLight)
                     .accessibilityLabel("Driving time \(entry.display)")
                     .accessibilityIdentifier("drivingValue")
             }
@@ -133,7 +133,7 @@ struct KeypadButton: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: digitSize))
-                .foregroundStyle(Color.tachoDark)
+                .foregroundStyle(Color.tachoTextOnLight)
                 .frame(maxWidth: .infinity, minHeight: 50)
                 .background(.white, in: RoundedRectangle(cornerRadius: 8.5, style: .continuous))
         }

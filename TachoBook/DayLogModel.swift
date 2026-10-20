@@ -14,7 +14,7 @@ public enum LogEntryType: Hashable, Sendable {
 
 @Observable
 public final class DayLogModel {
-    private var state: ShiftJournal
+    private(set) var state: ShiftJournal
     @ObservationIgnored private var store: ShiftStore?
     public private(set) var storageError: String?
 
@@ -88,6 +88,13 @@ public final class DayLogModel {
                 let restStart = Date().addingTimeInterval(-46 * 3600)
                 model.seedWeeklyRestIfEmpty(shiftStart: restStart.addingTimeInterval(-3 * 3600),
                                             restStart: restStart, drivingMinutes: 128)
+            } else if args.contains("-seedLongShift"), model.isEmpty {
+                // A shift from three days ago 20:10 to just after midnight today: it covers yesterday.
+                let calendar = Calendar.current
+                let midnight = calendar.startOfDay(for: Date())
+                if let start = calendar.date(byAdding: .day, value: -3, to: midnight)?.addingTimeInterval(20 * 3600 + 600) {
+                    model.seedArchivedShiftIfEmpty(start: start, end: midnight.addingTimeInterval(60))
+                }
             } else if args.contains("-seedNearDutyLimit"), model.isEmpty {
                 model.setDayStart(Date().addingTimeInterval(-(14 * 3600 + 45 * 60)))
             } else if args.contains("-seedDailyRestNearEleven"), model.isEmpty {
@@ -117,6 +124,12 @@ public final class DayLogModel {
         seedWeeklyRestIfEmpty(shiftStart: start, restStart: restStart, drivingMinutes: 128)
     }
 
+    /// An archived (past) shift with an empty current record, for UI tests of overlap and cover cases.
+    public func seedArchivedShiftIfEmpty(start: Date, end: Date) {
+        guard isEmpty, start <= end else { return }
+        update { $0.history = [DutyPeriod(date: start, start: start, end: end, isClosed: true)] }
+    }
+
     public func seedWeeklyRestIfEmpty(shiftStart: Date, restStart: Date, drivingMinutes: Int) {
         guard isEmpty, shiftStart <= restStart else { return }
         update { journal in
@@ -140,7 +153,7 @@ public final class DayLogModel {
         URL.applicationSupportDirectory.appending(path: "TachoBook/shift-journal-v1.json")
     }
 
-    private func update(_ change: (inout ShiftJournal) -> Void) {
+    func update(_ change: (inout ShiftJournal) -> Void) {
         // Preserve an unreadable journal instead of overwriting it with an empty state.
         guard storageError == nil else { return }
         var next = state
@@ -202,6 +215,7 @@ public final class DayLogModel {
             journal.current.rests[journal.current.rests.count - 1].end = date
             journal.current.rests[journal.current.rests.count - 1].dailyRestConfirmed = true
             journal.history.append(journal.current)
+            journal.history.sortChronologically()
             journal.current = DutyPeriod(date: date, start: date)
         }
     }
@@ -343,13 +357,20 @@ public final class DayLogModel {
     private var lastClosedRestEnd: Date? { restSegments.last(where: { $0.end != nil })?.end }
 
     /// Start of day: available once the current rest reached its required milestone.
-    public func canStartShift(at date: Date, now: Date) -> Bool {
-        guard date <= now else { return false }
-        if isResting, let rest = restSegments.last {
-            return date.timeIntervalSince(rest.start) >= Double(restKind.requiredHours) * 3600
+    public func canStartShift(at date: Date, now: Date) -> Bool { checkStartShift(at: date, now: now) == nil }
+
+    /// nil when valid, else why not. `.other` has no approved copy yet.
+    public func checkStartShift(at date: Date, now: Date) -> TimeEntryIssue? {
+        guard date <= now else { return .future }
+        if let blocker = archivedPeriods.filter({ $0.end.map { date < $0 } ?? false }).max(by: { $0.end! < $1.end! }),
+           let end = blocker.end {
+            return .overlap(from: blocker.start ?? end, to: end)
         }
-        guard dayStart == nil else { return false }
-        return previousRest?.end.map { date >= $0 } ?? true
+        if isResting, let rest = restSegments.last {
+            return date.timeIntervalSince(rest.start) >= Double(restKind.requiredHours) * 3600 ? nil : .other
+        }
+        guard dayStart == nil else { return .other }
+        return previousRest?.end.map { date >= $0 } ?? true ? nil : .other
     }
 
     public func startShift(at date: Date, now: Date) {
@@ -362,9 +383,13 @@ public final class DayLogModel {
     }
 
     /// End of day: closes the open shift and starts a daily rest at `date`.
-    public func canCloseShift(at date: Date, now: Date) -> Bool {
-        guard isShiftOpen, let start = dayStart else { return false }
-        return date >= start && date <= now && (lastClosedRestEnd.map { date >= $0 } ?? true)
+    public func canCloseShift(at date: Date, now: Date) -> Bool { checkCloseShift(at: date, now: now) == nil }
+
+    public func checkCloseShift(at date: Date, now: Date) -> TimeEntryIssue? {
+        guard isShiftOpen, let start = dayStart else { return .other }
+        if date > now { return .future }
+        if date < start { return .endBeforeStart(start: start) }
+        return (lastClosedRestEnd.map { date >= $0 } ?? true) ? nil : .other
     }
 
     public func closeShift(at date: Date, now: Date) {
@@ -373,15 +398,21 @@ public final class DayLogModel {
     }
 
     /// Editing Day started keeps the previous rest linked to it when they share the instant.
-    public func canEditDayStart(_ date: Date, now: Date) -> Bool {
-        guard let current = dayStart, date <= now else { return false }
-        if let end = dayEnd, date > end { return false }
-        if let firstRest = restSegments.first, date > firstRest.start { return false }
-        if let previous = previousRest {
-            if previous.end == current { return date >= previous.start }
-            if let end = previous.end, date < end { return false }
+    public func canEditDayStart(_ date: Date, now: Date) -> Bool { checkEditDayStart(date, now: now) == nil }
+
+    public func checkEditDayStart(_ date: Date, now: Date) -> TimeEntryIssue? {
+        guard let current = dayStart else { return .other }
+        if date > now { return .future }
+        if let end = dayEnd, date > end { return .endBeforeStart(start: date) }
+        if let blocker = overlapBlocker(start: date, end: dayEnd ?? date, excluding: dutyID, now: now) {
+            return .overlap(from: blocker.from, to: blocker.to)
         }
-        return true
+        if let firstRest = restSegments.first, date > firstRest.start { return .other }
+        if let previous = archivedPeriods.last, let rest = previous.rests.last {
+            let tooEarly = rest.end == current ? date < rest.start : (rest.end.map { date < $0 } ?? false)
+            if tooEarly { return .overlap(from: previous.start ?? rest.start, to: previous.end ?? rest.start) }
+        }
+        return nil
     }
 
     public func editDayStart(_ date: Date, now: Date) {
@@ -397,9 +428,17 @@ public final class DayLogModel {
     }
 
     /// Editing Day closed moves the running rest start with it.
-    public func canEditDayEnd(_ date: Date, now: Date) -> Bool {
-        guard dayEnd != nil, let start = dayStart else { return false }
-        return date >= start && date <= now && (lastClosedRestEnd.map { date >= $0 } ?? true)
+    public func canEditDayEnd(_ date: Date, now: Date) -> Bool { checkEditDayEnd(date, now: now) == nil }
+
+    public func checkEditDayEnd(_ date: Date, now: Date) -> TimeEntryIssue? {
+        guard dayEnd != nil, let start = dayStart else { return .other }
+        if date > now { return .future }
+        if date < start { return .endBeforeStart(start: start) }
+        if let rest = lastClosedRestEnd, date < rest { return .other }
+        if let blocker = overlapBlocker(start: start, end: date, excluding: dutyID, now: now) {
+            return .overlap(from: blocker.from, to: blocker.to)
+        }
+        return nil
     }
 
     public func editDayEnd(_ date: Date, now: Date) {
