@@ -72,7 +72,8 @@ public struct TimeEntrySheet: View {
                     .labelsHidden()
                     .accessibilityIdentifier("sheetDatePicker")
                 // Why Confirm is disabled; sits below the picker so the picker never moves.
-                if let reason = check(date)?.message() {
+                let reason = check(date)?.message()
+                if let reason {
                     Text(reason)
                         .font(.footnote)
                         .foregroundStyle(TachoTheme.sheetSubtitle)
@@ -80,9 +81,11 @@ public struct TimeEntrySheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 24)
                         .accessibilityIdentifier("sheetReason")
+                        .transition(.opacity)
                 }
             }
             .padding(.top, 59)
+            .animation(.default, value: check(date)?.message())
             Spacer(minLength: 24)
         }
         .foregroundStyle(Color.tachoDark)

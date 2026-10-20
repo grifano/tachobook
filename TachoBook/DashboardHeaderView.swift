@@ -27,6 +27,8 @@ public struct DashboardHeaderView: View {
     }
 
     private var isToday: Bool { Calendar.current.isDate(date, inSameDayAs: today) }
+    @Namespace private var selectionCircle
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public var body: some View {
         VStack(spacing: 8) {
@@ -34,9 +36,11 @@ public struct DashboardHeaderView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(date.formatted(.dateTime.weekday(.wide)))
                         .font(.largeTitle.weight(.semibold))
+                        .contentTransition(.opacity)
                         .accessibilityAddTraits(.isHeader)
                     Text(HomeTimeline.headerDate(date))
                         .font(.subheadline.weight(.medium))
+                        .contentTransition(.opacity)
                         .accessibilityIdentifier("headerDate")
                 }
                 .foregroundStyle(.white)
@@ -57,6 +61,7 @@ public struct DashboardHeaderView: View {
                     .buttonStyle(.plain)
                     .accessibilityHint("Back to today")
                     .accessibilityIdentifier("todayButton")
+                    .transition(.opacity)
                 }
 
                 // Settings has no destination yet; shown as in Figma without navigation.
@@ -71,9 +76,11 @@ public struct DashboardHeaderView: View {
             .padding(.horizontal, 16)
 
             HStack(spacing: 8) {
-                ForEach(HomeTimeline.weekStrip(around: date), id: \.offset) { day in
-                    WeekDayItem(day: day, isViewedToday: isToday,
+                ForEach(HomeTimeline.dateStrip(today: today), id: \.offset) { day in
+                    WeekDayItem(day: day, isSelected: Calendar.current.isDate(day.date, inSameDayAs: date),
+                                isViewedToday: isToday,
                                 reach: DayHistory.daysBack(of: day.date, from: today),
+                                circle: selectionCircle, movesCircle: !reduceMotion,
                                 onSelect: onSelect, onAdjust: onAdjust)
                 }
             }
@@ -83,42 +90,46 @@ public struct DashboardHeaderView: View {
     }
 }
 
-/// `day.isToday` marks the viewed day (the centre of the strip). A date the swipe can reach
-/// (`reach` = days back, today … 3) is a button; the others do nothing and look as before.
+/// One date in the fixed strip. The selected day carries the circle (it moves between dates);
+/// a date the swipe can reach (`reach` = days back, today … `maxDaysBack`) is a button; the others
+/// do nothing and keep their look.
 struct WeekDayItem: View {
     var day: HomeTimeline.WeekStripDay
+    var isSelected: Bool
     var isViewedToday = true
     var reach: Int?
+    var circle: Namespace.ID
+    var movesCircle = true
     var onSelect: (Int) -> Void = { _ in }
     var onAdjust: (Int) -> Void = { _ in }
 
     /// Figma fades neighbours to 50 % and 25 % opacity; solid lighter grays keep the
     /// hierarchy with readable contrast (the audit rejects translucent text).
     private var whiteLevel: Double {
-        day.isToday ? 1 : (abs(day.offset) == 1 ? 0.93 : 0.86)
+        isSelected ? 1 : (reach != nil ? 0.93 : 0.86)
     }
 
     private var fullDate: String { day.date.formatted(date: .complete, time: .omitted) }
 
     var body: some View {
-        if !day.isToday, let reach {
+        if !isSelected, let reach {
             Button { onSelect(reach) } label: { content }
                 .buttonStyle(.plain)
                 .accessibilityLabel(reach == 0 ? "Today, \(fullDate)" : fullDate)
                 .accessibilityIdentifier("weekStripDay")
         } else {
             content
-                // Only the viewed day is announced; dates the swipe cannot reach stay silent.
+                // Only the selected day is announced; dates the swipe cannot reach stay silent.
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(day.isToday ? "\(isViewedToday ? "Today, " : "")\(fullDate)" : "")
-                .accessibilityAddTraits(day.isToday ? .isSelected : [])
-                .accessibilityHidden(!day.isToday)
+                .accessibilityLabel(isSelected ? "\(isViewedToday ? "Today, " : "")\(fullDate)" : "")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+                .accessibilityHidden(!isSelected)
                 // The selected day is adjustable: swipe up or down to move to the next or previous day.
                 .accessibilityAdjustableAction { direction in
-                    guard day.isToday else { return }
+                    guard isSelected else { return }
                     onAdjust(direction == .increment ? 1 : -1)
                 }
-                .accessibilityIdentifier(day.isToday ? (isViewedToday ? "weekStripToday" : "weekStripSelected") : "weekStripOutOfRange")
+                .accessibilityIdentifier(isSelected ? (isViewedToday ? "weekStripToday" : "weekStripSelected") : "weekStripOutOfRange")
         }
     }
 
@@ -133,14 +144,20 @@ struct WeekDayItem: View {
         .lineLimit(1)
         .minimumScaleFactor(0.7)
         .frame(maxWidth: .infinity, minHeight: 44)
-        .background {
-            // Figma "Week Day" BG: 44 pt circle, #E4E4E4 at 30 % fill inside a 44 % layer.
-            if day.isToday {
-                Circle()
-                    .fill(Color(red: 228/255, green: 228/255, blue: 228/255).opacity(0.3 * 0.44))
-                    .frame(width: 44, height: 44)
-            }
-        }
+        .background { if isSelected { selectionCircle } }
         .contentShape(Rectangle())
+    }
+
+    /// Figma "Week Day" BG: 44 pt circle, #E4E4E4 at 30 % fill inside a 44 % layer.
+    /// With Reduce Motion it fades in place instead of travelling to the new date.
+    @ViewBuilder private var selectionCircle: some View {
+        let circleShape = Circle()
+            .fill(Color(red: 228/255, green: 228/255, blue: 228/255).opacity(0.3 * 0.44))
+            .frame(width: 44, height: 44)
+        if movesCircle {
+            circleShape.matchedGeometryEffect(id: "selection", in: circle)
+        } else {
+            circleShape.transition(.opacity)
+        }
     }
 }

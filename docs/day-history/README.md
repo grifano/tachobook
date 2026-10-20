@@ -6,7 +6,8 @@ Figma: [09 Home — rest, Work tab, node 490:26329](https://www.figma.com/design
 
 ## What the driver gets
 
-- Swipe right on Home (finger moves right, as in iOS Calendar): the previous day, up to 3 days back (`DayHistory.maxDaysBack`). Swipe left: toward today. Today is the newest day; at day −3 and at today the swipe does nothing.
+- Swipe right on Home (finger moves right, as in iOS Calendar): the previous day, up to 3 days back (`DayHistory.maxDaysBack`). Swipe left: toward today. A swipe further back on the oldest day shows a small label "Older days are in History." near the strip (it leaves after 3 s or on any tap, and returns with the next such swipe; no navigation). Today is the newest day; at day −3 and at today the swipe does nothing.
+- The date strip is fixed: `DayHistory.maxDaysBack` days before today, today, and the days after today that fill the five slots (3 back, today, tomorrow). Swiping or tapping moves only the selection circle; the dates never scroll, and the strip updates at midnight. Figma centres the selected day; this is an approved difference.
 - Dates in the header strip that the swipe can reach (today and 3 days back) are buttons and open that day. Other dates (deeper, or in the future) do nothing and look the same. Tap targets are 44 pt; VoiceOver reads the full date.
 - A **Today** button next to the settings icon whenever a past day is shown. Hidden on today.
 - A past day uses the Home layout. Work tab: frozen work card and the day summary. Rest tab: the rest taken after that shift, as HH:MM.
@@ -22,6 +23,7 @@ Figma: [09 Home — rest, Work tab, node 490:26329](https://www.figma.com/design
 | Day | The calendar date of the shift start (device calendar). A shift across midnight stays on its start date; the next day shows empty. |
 | Records | A record may hold only some fields. Past records are stored with the archived periods, so there is no schema change and existing data is untouched. |
 | Active shift | Never changed by browsing or by past entries. An open (running) shift is shown only on today. A closed shift whose rest is still running is the latest closed shift: it shows on its start day and is edited with the existing Home commands. |
+| Animations | Standard SwiftUI animations (`withAnimation`, system transitions): Work/Rest switch (native segmented `Picker`), day change (push; cross-fade with Reduce Motion), the selection circle (`matchedGeometryEffect`; fades in place with Reduce Motion), Today button, the rest note, the history hint and the reason line. Sheets keep the system presentation. |
 | Reasons under a disabled Confirm | Future: "This time hasn't happened yet." Day closed before Day started: "Day closed can’t be before Day started (Fri 16, 06:10)." Overlap: "This overlaps your shift from Wed 14, 20:10 to Sun 18, 20:01." (open shift: "…your current shift from Wed 14, 20:10.") Time outside the day: "Pick a time on Sat 17." Dates and times follow the device locale. The validators return the reason (`TimeEntryIssue`); a disabled case without approved copy (Start of day before the rest milestone, a rest-link edge) shows nothing. |
 | Validation (R-E01) | Start on the selected day and not in the future. End not before start, not in the future. No overlap with another record or the running shift (touching at one instant is allowed). Driving not negative. Start of day on Home cannot precede the end of an entered past shift. |
 | Rest taken | Next shift start minus this shift end. If there is no later shift: time up to now, labelled "So far", end "Running". No Day closed: placeholder. Not classified as daily or weekly; no 9/11/24/45 h markers. |
@@ -41,7 +43,12 @@ Day −1 of the seeded scenario (`-homeFlowUITest -seedReadyWeeklyRest`, yesterd
 | Day −3, the limit | — | ![](limit-402.jpg) | ![](limit-390.jpg) |
 | Date strip with the selected day (Sat 17) | — | ![](strip-402.jpg) | ![](strip-390.jpg) |
 | Note on a day covered by rest | — | ![](note-402.jpg) | ![](note-390.jpg) |
+| Hint at the history limit | — | ![](hint-402.jpg) | ![](hint-390.jpg) |
 | Reason under the picker (stored shift covers yesterday) | — | ![](reason-402.jpg) | ![](reason-390.jpg) |
+
+## Tab bar (F7): paused, decision needed
+
+Figma node 490:26372 shows four tabs (Home selected, History, Violations, Restrictions dimmed). A native SwiftUI `TabView` with `Tab(...).disabled(true)` shows them dimmed and inert ([prototype](tabbar-native-prototype-402.jpg), [Figma](tabbar-figma.jpg)), but SwiftUI does not give the disabled tabs the accessibility "not enabled" trait: VoiceOver does not say "dimmed", and the accessibility audit reports "Missing trait: UIAccessibilityTraitNotEnabled" for History, Violations and Restrictions in every Home state. Setting `isEnabled`, `accessibilityTraits` on `tabBar.items` and on the tab buttons through UIKit had no effect on what XCUITest and the audit see. The current custom tab bar stays in this PR until the choice is made.
 
 ## Known differences and limits
 

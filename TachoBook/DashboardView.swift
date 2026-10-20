@@ -22,6 +22,7 @@ public struct DashboardView: View {
     }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State public var model: DayLogModel
     @State private var sheet: HomeSheet?
     @State private var tabOverride: HomeTab?
@@ -35,6 +36,9 @@ public struct DashboardView: View {
     /// wide capsule or card must never count as a tap on it.
     @GestureState private var isSwiping = false
     @State private var swipeEndedAt: Date?
+    /// The small "Older days are in History." label after a swipe past the oldest reachable day.
+    @State private var showLimitHint = false
+    @State private var limitHintToken = 0
 
     /// DEBUG only: `-startDaysBack 1` opens an earlier day, for screenshots and audits.
     private static var initialDaysBack: Int {
@@ -56,7 +60,9 @@ public struct DashboardView: View {
         let defaultTab: HomeTab = daysBack == 0 && model.isResting ? .rest : .work
         return Binding(
             get: { tabOverride ?? defaultTab },
-            set: { tabOverride = $0 == defaultTab ? nil : $0 }
+            set: { newValue in
+                withAnimation { tabOverride = newValue == defaultTab ? nil : newValue }
+            }
         )
     }
 
@@ -67,7 +73,6 @@ public struct DashboardView: View {
                 DashboardHeaderView(date: daysBack == 0 ? now : DayHistory.day(daysBack: daysBack, from: now),
                                     today: now, onToday: { step(to: 0) }, onSelect: { step(to: $0) },
                                     onAdjust: { step(to: daysBack - $0) })
-                    .transaction { $0.animation = nil }
                 ScrollView {
                     VStack(spacing: 20) {
                         if daysBack == 0 {
@@ -83,12 +88,28 @@ public struct DashboardView: View {
                     .padding(.top, 2)
                     .padding(.bottom, 16)
                     .id(daysBack)
-                    .transition(.push(from: slideEdge))
+                    .transition(dayTransition)
                     .allowsHitTesting(!isSwiping)
                 }
                 .scrollIndicators(.hidden)
                 .simultaneousGesture(daySwipe)
+                .overlay(alignment: .top) {
+                    if showLimitHint {
+                        LimitHint(text: Self.limitHintText)
+                            // Straddles the top edge of the card, just under the date strip, clear of the card title.
+                            .padding(.top, -10)
+                            .transition(.opacity)
+                    }
+                }
             }
+        }
+        // Any tap dismisses the hint; it also dismisses itself after a few seconds.
+        .simultaneousGesture(TapGesture().onEnded { if showLimitHint { dismissLimitHint() } })
+        .task(id: limitHintToken) {
+            guard showLimitHint else { return }
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            dismissLimitHint()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             DashboardTabBarView()
@@ -106,7 +127,7 @@ public struct DashboardView: View {
             }
             .ignoresSafeArea()
         }
-        .onChange(of: model.isResting) { tabOverride = nil }
+        .onChange(of: model.isResting) { withAnimation { tabOverride = nil } }
         .onChange(of: daysBack) { tabOverride = nil }
         .sheet(item: $sheet, onDismiss: presentPendingDrivingAlert) { sheet in
             sheetContent(sheet)
@@ -320,7 +341,12 @@ public struct DashboardView: View {
                 swipeEndedAt = Date()
                 guard sheet == nil, !showDrivingAlert, abs(drag.translation.width) > 60 else { return }
                 // Finger moving right opens the previous day, left goes toward today (as in iOS Calendar).
-                step(to: daysBack + (drag.translation.width > 0 ? 1 : -1))
+                let towardPast = drag.translation.width > 0
+                if towardPast, daysBack == DayHistory.maxDaysBack {
+                    showLimitHintOnce()
+                } else {
+                    step(to: daysBack + (towardPast ? 1 : -1))
+                }
             }
     }
 
@@ -335,7 +361,25 @@ public struct DashboardView: View {
         let next = min(max(target, 0), DayHistory.maxDaysBack)
         guard next != daysBack else { return }
         slideEdge = next > daysBack ? .leading : .trailing
-        withAnimation(.easeInOut(duration: 0.25)) { daysBack = next }
+        withAnimation { daysBack = next }
+    }
+
+    /// Day changes slide in the swipe direction; with Reduce Motion they cross-fade instead.
+    private var dayTransition: AnyTransition {
+        reduceMotion ? .opacity : .push(from: slideEdge)
+    }
+
+    private static let limitHintText = "Older days are in History."
+
+    /// A swipe past the oldest day: show the hint (again, if it was dismissed).
+    private func showLimitHintOnce() {
+        limitHintToken += 1
+        withAnimation { showLimitHint = true }
+        AccessibilityNotification.Announcement(Self.limitHintText).post()
+    }
+
+    private func dismissLimitHint() {
+        withAnimation { showLimitHint = false }
     }
 
     @ViewBuilder
@@ -428,6 +472,8 @@ public struct DashboardView: View {
             .accessibilityIdentifier(item.identifier)
             .accessibilityHint("Edit")
         }
+        // The note slides in and out with the system animation when the day gains or loses it.
+        .animation(.default, value: note)
     }
 
     // MARK: - Sheets
@@ -499,6 +545,22 @@ public struct DashboardView: View {
         guard drivingAlertPending else { return }
         drivingAlertPending = false
         showDrivingAlert = true
+    }
+}
+
+/// Small rounded label shown after a swipe past the oldest reachable day.
+private struct LimitHint: View {
+    var text: String
+
+    var body: some View {
+        Text(text)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            // Same dark fill as the Today button, so the text keeps its contrast over the photo.
+            .background(TachoTheme.blueText, in: Capsule())
+            .accessibilityIdentifier("historyLimitHint")
     }
 }
 

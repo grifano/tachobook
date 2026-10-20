@@ -130,15 +130,22 @@ public enum HomeTimeline {
 
     public struct WeekStripDay: Equatable {
         public var date: Date
-        /// Days from today: -2 … 2.
+        /// Days from today: negative for earlier days.
         public var offset: Int
         public var isToday: Bool { offset == 0 }
     }
 
-    /// Five days centred on today in the device calendar; today moves at local midnight.
-    public static func weekStrip(around now: Date, calendar: Calendar = .current) -> [WeekStripDay] {
+    /// Number of dates in the header strip.
+    public static let stripLength = 5
+
+    /// The strip never re-centres: `DayHistory.maxDaysBack` days before today, today, and the days
+    /// after today that fill the remaining slots (3 back, today, tomorrow). It follows the device
+    /// calendar, so today moves at local midnight.
+    public static func dateStrip(today now: Date, daysBack: Int = DayHistory.maxDaysBack,
+                                 length: Int = stripLength, calendar: Calendar = .current) -> [WeekStripDay] {
         let today = calendar.startOfDay(for: now)
-        return (-2...2).compactMap { offset in
+        let first = -min(max(0, daysBack), length - 1)
+        return (first..<(first + length)).compactMap { offset in
             calendar.date(byAdding: .day, value: offset, to: today).map { WeekStripDay(date: $0, offset: offset) }
         }
     }

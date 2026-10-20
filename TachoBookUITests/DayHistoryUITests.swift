@@ -41,25 +41,28 @@ final class DayHistoryUITests: XCTestCase {
         XCTAssertEqual(header(app), headerDate(daysBack: 0), "today is the newest day")
     }
 
-    /// F2: dates the swipe can reach open their day; the others do nothing.
+    /// F2 and F5: reachable dates open their day, the others do nothing, and the dates never move.
     @MainActor
     func testTappingADateInTheStripOpensItsDay() {
         let app = launch(reset: true)
         XCTAssertTrue(app.buttons["summaryDayClosed"].waitForExistence(timeout: 5))
         let reachable = app.buttons.matching(identifier: "weekStripDay")
-        XCTAssertEqual(reachable.count, 2, "today: only the two days before it are reachable, the two after are in the future")
+        XCTAssertEqual(reachable.count, 3, "today: the three days before it are reachable, tomorrow is not")
         for index in 0..<reachable.count {
             let item = reachable.element(boundBy: index)
             XCTAssertGreaterThanOrEqual(item.frame.height, 43.9, "tap target of 44 pt (layout rounding)")
             XCTAssertGreaterThanOrEqual(item.frame.width, 43.9)
             XCTAssertFalse(item.label.isEmpty)
         }
+        let fixedDates = stripNumbers(app)
+        XCTAssertEqual(fixedDates.count, DayHistoryUITests.stripLength)
         attach("Strip on today")
 
-        reachable.element(boundBy: 0).tap() // two days back
-        XCTAssertEqual(header(app), headerDate(daysBack: 2))
+        reachable.element(boundBy: 0).tap() // three days back
+        XCTAssertEqual(header(app), headerDate(daysBack: 3))
         XCTAssertTrue(app.buttons["todayButton"].exists)
-        XCTAssertEqual(app.descendants(matching: .any)["weekStripSelected"].label.isEmpty, false)
+        XCTAssertEqual(stripNumbers(app), fixedDates, "the dates stay where they are, only the circle moves")
+        XCTAssertFalse(app.descendants(matching: .any)["weekStripSelected"].label.isEmpty)
         attach("Strip with the selected day")
 
         // Tapping today's date in the strip goes back to today.
@@ -68,15 +71,63 @@ final class DayHistoryUITests: XCTestCase {
         today.tap()
         XCTAssertEqual(header(app), headerDate(daysBack: 0))
         XCTAssertFalse(app.buttons["todayButton"].exists)
+        XCTAssertEqual(stripNumbers(app), fixedDates)
 
-        // At day −3 the two dates before it are out of range and do nothing.
+        // Tomorrow is in the future: tapping it does nothing.
+        let tomorrow = app.otherElements.matching(identifier: "weekStripOutOfRange").firstMatch
+        XCTAssertTrue(tomorrow.exists)
+        tomorrow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertEqual(header(app), headerDate(daysBack: 0), "an unreachable date does nothing")
+    }
+
+    /// F5: swiping moves only the selection circle; the five dates keep their places.
+    @MainActor
+    func testStripDatesStayFixedWhileSwiping() {
+        let app = launch(reset: true)
+        XCTAssertTrue(app.buttons["summaryDayClosed"].waitForExistence(timeout: 5))
+        let fixedDates = stripNumbers(app)
+        XCTAssertEqual(fixedDates.count, DayHistoryUITests.stripLength)
+        let startX = app.descendants(matching: .any)["weekStripToday"].frame.midX
+        app.swipeRight()
+        XCTAssertEqual(header(app), headerDate(daysBack: 1))
+        XCTAssertEqual(stripNumbers(app), fixedDates)
+        let yesterdayX = app.descendants(matching: .any)["weekStripSelected"].frame.midX
+        XCTAssertLessThan(yesterdayX, startX, "the circle moved left")
+        app.swipeRight()
+        XCTAssertEqual(stripNumbers(app), fixedDates)
+        XCTAssertLessThan(app.descendants(matching: .any)["weekStripSelected"].frame.midX, yesterdayX)
+        app.swipeLeft()
+        app.swipeLeft()
+        XCTAssertEqual(stripNumbers(app), fixedDates)
+        XCTAssertEqual(app.descendants(matching: .any)["weekStripToday"].frame.midX, startX, accuracy: 1)
+    }
+
+    /// F6: a swipe past the oldest day shows a small hint, once per swipe; it goes away on its own or on a tap.
+    @MainActor
+    func testHintAtTheHistoryLimit() {
+        let app = launch(reset: true)
+        XCTAssertTrue(app.buttons["summaryDayClosed"].waitForExistence(timeout: 5))
+        let hint = app.staticTexts["historyLimitHint"]
         for _ in 0..<3 { app.swipeRight() }
         XCTAssertEqual(header(app), headerDate(daysBack: 3))
-        XCTAssertEqual(app.buttons.matching(identifier: "weekStripDay").count, 2)
-        let outOfRange = app.otherElements.matching(identifier: "weekStripOutOfRange").firstMatch
-        XCTAssertTrue(outOfRange.exists)
-        outOfRange.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertEqual(header(app), headerDate(daysBack: 3), "an unreachable date does nothing")
+        XCTAssertFalse(hint.exists, "reaching the oldest day shows nothing")
+
+        app.swipeRight() // one more: the limit
+        XCTAssertTrue(hint.waitForExistence(timeout: 3))
+        Thread.sleep(forTimeInterval: 0.4) // let the fade-in finish; the hint leaves after 3 s
+        attach("History limit hint")
+        XCTAssertEqual(hint.label, "Older days are in History.")
+        XCTAssertEqual(header(app), headerDate(daysBack: 3), "no navigation")
+        XCTAssertTrue(hint.waitForNonExistence(timeout: 8), "dismisses itself after a few seconds")
+
+        app.swipeRight()
+        XCTAssertTrue(hint.waitForExistence(timeout: 3), "shown again by the next swipe")
+        app.staticTexts["headerDate"].tap() // any tap
+        XCTAssertTrue(hint.waitForNonExistence(timeout: 3))
+
+        // Other swipes never show it.
+        app.swipeLeft()
+        XCTAssertFalse(hint.exists)
     }
 
     /// F3: a past day with no shift that a rest covers shows one line; a tap opens the day the rest started.
@@ -207,6 +258,17 @@ final class DayHistoryUITests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    private static let stripLength = 5
+
+    /// The day numbers of the header strip, left to right.
+    @MainActor
+    private func stripNumbers(_ app: XCUIApplication) -> [String] {
+        app.staticTexts.allElementsBoundByIndex
+            .filter { $0.frame.minY > 100 && $0.frame.minY < 175 && $0.label.range(of: #"^\d{1,2}$"#, options: .regularExpression) != nil }
+            .sorted { $0.frame.minX < $1.frame.minX }
+            .map(\.label)
+    }
 
     @MainActor
     private func launch(reset: Bool, daysBack: Int = 0, seed: String = "-seedReadyWeeklyRest") -> XCUIApplication {
