@@ -44,8 +44,8 @@ Work card (completed count 1), no Figma frame:
 
 Rest card, completed count 1: after a 14 h shift (pending bed) `rest-after-14h-402.jpg`; after a 12 h shift (no pending bed) `rest-after-12h-402.jpg`.
 
-Open: at accessibility text sizes the last-hour warning ("00:30") grows past the arc and, at the largest size, covers the beds: `work-14h30-axL-402.jpg`, `work-14h30-axXXXL-402.jpg`. No layout was invented (decision 13); awaiting Serhii's decision.
+Known limitation, accepted by Serhii on 20.10.2026 (option a): at accessibility text sizes the last-hour warning ("00:30") grows past the arc and, at the largest size, covers the beds: `work-14h30-axL-402.jpg`, `work-14h30-axXXXL-402.jpg`. Standard sizes up to XXXL are clear. No layout change.
 
 ## Debug launch arguments (UI tests and screenshots)
 
-`-homeFlowUITest -resetHomeFlowTest -seedReducedRests N` seeds a completed 46 h weekly rest, N reduced rests (12 h duty, 10 h rest) and a current daily rest of 1 min; add `-seedWeeklyCard` for a rest of 12 h (weekly card), or `-seedOpenShiftMinutes M` for a shift still open M minutes after its start (Work card).
+`-homeFlowUITest -resetHomeFlowTest -seedReducedRests N` seeds a completed 46 h weekly rest, N reduced rests (12 h duty, 10 h rest) and a current daily rest of 1 min; add `-seedWeeklyCard` for a rest of 12 h (weekly card), or `-seedOpenShiftMinutes M` for a shift still open M minutes after its start (Work card), or `-seedDutyMinutes M` for a closed shift of M minutes before the current rest (default 3 h).
