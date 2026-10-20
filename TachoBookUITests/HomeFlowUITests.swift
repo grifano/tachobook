@@ -239,6 +239,11 @@ final class HomeFlowUITests: XCTestCase {
     private func audit(_ app: XCUIApplication, _ state: String) throws {
         var issues: [String] = []
         try app.performAccessibilityAudit { issue in
+            // Accepted (Serhii, 2026-10-20): the native tab bar's dimmed tabs lack the "not enabled" trait.
+            if issue.compactDescription.contains("Missing trait"),
+               ["History", "Violations", "Restrictions"].contains(issue.element?.label ?? "") {
+                return true
+            }
             issues.append("\(issue.compactDescription): \(issue.element?.label ?? "unnamed node")")
             return true
         }

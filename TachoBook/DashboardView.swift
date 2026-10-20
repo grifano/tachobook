@@ -111,10 +111,6 @@ public struct DashboardView: View {
             guard !Task.isCancelled else { return }
             dismissLimitHint()
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            DashboardTabBarView()
-                .padding(.bottom, 8)
-        }
         .background {
             ZStack(alignment: .top) {
                 Image("DashboardBackground")
@@ -401,12 +397,12 @@ public struct DashboardView: View {
         let subtitle = start.map { "\(HomeTimeline.dateLabel($0)) · Started \(HomeTimeline.clockLabel($0, relativeTo: $0))" }
             ?? HomeTimeline.dateLabel(day)
         return workWidget(start: start, elapsed: elapsed, instant: end ?? now, subtitle: subtitle,
-                          isRestEnabled: true, labelsRelativeTo: day)
+                          isRestEnabled: true, labelsRelativeTo: day, placeholder: "?")
     }
 
     /// The Rest card layout for a past day: time taken after the shift, without 9/11/24/45 h markers.
     private func restTakenWidget(day: Date, rest: RestTaken?) -> some View {
-        let placeholder = "--:--"
+        let placeholder = "?"
         return HomeMainWidget(
             icon: "HomeRestIcon", iconSize: CGSize(width: 40, height: 27),
             title: "Rest Taken",
