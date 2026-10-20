@@ -97,6 +97,18 @@ public final class DayLogModel {
                 }
             } else if args.contains("-seedNearDutyLimit"), model.isEmpty {
                 model.setDayStart(Date().addingTimeInterval(-(14 * 3600 + 45 * 60)))
+            } else if let index = args.firstIndex(of: "-seedReducedRests"), index + 1 < args.count,
+                      let used = Int(args[index + 1]), model.isEmpty {
+                // Weekly rest, `used` reduced rests, then the current rest: daily (1 min) or weekly card (12 h).
+                // `-seedOpenShiftMinutes M`: instead, a shift still open M minutes after its start.
+                // `-seedDutyMinutes M`: the closed shift before the current rest lasted M minutes (default 3 h).
+                let restElapsed: TimeInterval = args.contains("-seedWeeklyCard") ? 12 * 3600 : 60
+                func minutes(_ flag: String) -> TimeInterval? {
+                    args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? Int(args[$0 + 1]) : nil }.map { TimeInterval($0) * 60 }
+                }
+                model.seedReducedRestsIfEmpty(used: used, restElapsed: restElapsed, now: Date(),
+                                              openShiftElapsed: minutes("-seedOpenShiftMinutes"),
+                                              closedShiftDuty: minutes("-seedDutyMinutes") ?? 3 * 3600)
             } else if args.contains("-seedDailyRestNearEleven"), model.isEmpty {
                 // A daily rest 20 s short of 11 h, to watch it switch to the weekly card.
                 let now = Date()
@@ -128,6 +140,35 @@ public final class DayLogModel {
     public func seedArchivedShiftIfEmpty(start: Date, end: Date) {
         guard isEmpty, start <= end else { return }
         update { $0.history = [DutyPeriod(date: start, start: start, end: end, isClosed: true)] }
+    }
+
+    /// Records for the Rest Count row: a shift and a 46 h weekly rest, then `used` days of 12 h duty with a
+    /// 10 h (reduced) rest, then the current shift closed `restElapsed` before `now` — or, with
+    /// `openShiftElapsed`, still open and started that long before `now`. Never replaces stored data.
+    public func seedReducedRestsIfEmpty(used: Int, restElapsed: TimeInterval, now: Date,
+                                        openShiftElapsed: TimeInterval? = nil, closedShiftDuty: TimeInterval = 3 * 3600) {
+        guard isEmpty, used >= 0 else { return }
+        let hour: TimeInterval = 3600
+        let restStart = now.addingTimeInterval(-restElapsed)
+        let currentStart = openShiftElapsed.map { now.addingTimeInterval(-$0) } ?? restStart.addingTimeInterval(-closedShiftDuty)
+        var periods: [DutyPeriod] = []
+        var nextStart = currentStart
+        func prepend(start: Date, duty: TimeInterval, kind: RestKind) {
+            let end = start.addingTimeInterval(duty)
+            periods.insert(DutyPeriod(date: start, start: start, drivingMinutes: 480, end: end, isClosed: true,
+                                      rests: [RestSegment(start: end, end: nextStart, dailyRestConfirmed: true, kind: kind)]),
+                           at: 0)
+            nextStart = start
+        }
+        for _ in 0..<used { prepend(start: nextStart.addingTimeInterval(-22 * hour), duty: 12 * hour, kind: .daily) }
+        prepend(start: nextStart.addingTimeInterval(-54 * hour), duty: 8 * hour, kind: .weekly)
+        update { journal in
+            journal.history = periods
+            journal.current = openShiftElapsed == nil
+                ? DutyPeriod(date: currentStart, start: currentStart, drivingMinutes: 128, end: restStart,
+                             isClosed: true, rests: [RestSegment(start: restStart, kind: .daily)])
+                : DutyPeriod(date: currentStart, start: currentStart, drivingMinutes: 128)
+        }
     }
 
     public func seedWeeklyRestIfEmpty(shiftStart: Date, restStart: Date, drivingMinutes: Int) {

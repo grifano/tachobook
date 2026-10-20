@@ -187,13 +187,15 @@ public struct DashboardView: View {
         // A frozen shift is judged at its close time, a running one at now.
         return workWidget(start: start, elapsed: model.shiftElapsedSeconds(at: now) ?? 0,
                           instant: model.currentRestStart ?? now, subtitle: subtitle,
-                          isRestEnabled: model.isResting, labelsRelativeTo: now)
+                          isRestEnabled: model.isResting, labelsRelativeTo: now,
+                          reducedRestsUsed: model.workCardReducedRests(now: now))
     }
 
     /// Work card for any shift. `elapsed` nil shows the "--:--" placeholder instead of zeros.
+    /// `reducedRestsUsed` shows the bed row once the shift's reduction is certain (past 13 h).
     private func workWidget(start: Date?, elapsed: Int?, instant: Date, subtitle: String,
                             isRestEnabled: Bool, labelsRelativeTo reference: Date,
-                            placeholder: String = "--:--") -> some View {
+                            placeholder: String = "--:--", reducedRestsUsed: Int? = nil) -> some View {
         let markers = start.map { HomeTimeline.dutyMarkers(shiftStart: $0) }
         let warning = start.flatMap { start in
             elapsed != nil && HomeTimeline.isDutyWarning(shiftStart: start, at: instant)
@@ -208,7 +210,7 @@ public struct DashboardView: View {
                 limit: "\(HomeTimeline.dutyMarkerHours.second)h",
                 value: elapsed.map { HomeTimeline.clockDuration(seconds: $0) } ?? placeholder,
                 progress: Double(elapsed ?? 0) / (Double(HomeTimeline.dutyMarkerHours.second) * 3600),
-                tint: .tachoOrange, warning: warning),
+                tint: .tachoOrange, warning: warning, reducedRestsUsed: reducedRestsUsed),
             limits: [
                 HomeLimit(label: "\(HomeTimeline.dutyMarkerHours.first)h limit end",
                           value: markers.map { HomeTimeline.clockLabel($0.first, relativeTo: reference) } ?? placeholder),
@@ -233,7 +235,7 @@ public struct DashboardView: View {
                     limit: "\(kind.requiredHours)h",
                     value: HomeTimeline.clockDuration(seconds: elapsed),
                     progress: Double(elapsed) / (Double(kind.requiredHours) * 3600),
-                    tint: .tachoBlue),
+                    tint: .tachoBlue, reducedRestsUsed: model.restCardReducedRests(now: now)),
                 limits: [
                     HomeLimit(label: "After \(kind.milestoneHours.first)h rest",
                               value: HomeTimeline.clockLabel(milestones.first, relativeTo: now)),
