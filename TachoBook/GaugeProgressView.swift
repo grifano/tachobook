@@ -46,7 +46,7 @@ public struct GaugeProgressView: View {
             .monospacedDigit()
             .lineLimit(1)
             .minimumScaleFactor(0.5)
-            .foregroundStyle(Color.tachoDark)
+            .foregroundStyle(Color.tachoTextOnLight)
             .frame(width: 96)
             .padding(.top, 51)
 
@@ -57,7 +57,7 @@ public struct GaugeProgressView: View {
                     .labelStyle(TightLabelStyle())
                     .font(.footnote.weight(.semibold))
                     .monospacedDigit()
-                    .foregroundStyle(TachoTheme.warningText)
+                    .foregroundStyle(Color.tachoTextOnLight)
                     .fixedSize()
                     .frame(width: 169)
                     .padding(.top, 115)

@@ -43,18 +43,45 @@ Day −1 of the seeded scenario (`-homeFlowUITest -seedReadyWeeklyRest`, yesterd
 | Day −3, the limit | — | ![](limit-402.jpg) | ![](limit-390.jpg) |
 | Date strip with the selected day (Sat 17) | — | ![](strip-402.jpg) | ![](strip-390.jpg) |
 | Note on a day covered by rest | — | ![](note-402.jpg) | ![](note-390.jpg) |
-| Tab bar (Figma: [reference](tabbar-figma.jpg)) | ![](tabbar-figma.jpg) | ![](tabbar-402.jpg) | ![](tabbar-390.jpg) |
+| Tab bar (Figma shows the orange pill, overridden) | ![](tabbar-figma.jpg) | ![](tabbar-402.jpg) | ![](tabbar-390.jpg) |
+| Today, Light mode | — | ![](today-light-402.jpg) | ![](today-light-390.jpg) |
+| Today, Dark mode | — | ![](today-dark-402.jpg) | ![](today-dark-390.jpg) |
+| Past day, Light mode | — | ![](past-light-402.jpg) | ![](past-light-390.jpg) |
+| Past day, Dark mode | — | ![](past-dark-402.jpg) | ![](past-dark-390.jpg) |
 | Hint at the history limit | — | ![](hint-402.jpg) | ![](hint-390.jpg) |
 | Reason under the picker (stored shift covers yesterday) | — | ![](reason-402.jpg) | ![](reason-390.jpg) |
 
-## Tab bar (F7, option A chosen by Serhii on 2026-10-20)
+## Tab bar (F7: native bar, option A, updated 2026-10-20)
 
-The custom bar is replaced by the native SwiftUI `TabView` (`ContentView`): Home (selected, orange tint), History, Violations, Restrictions as in Figma node 490:26372. SF Symbols: `house`, `calendar.badge.clock`, `exclamationmark.circle.fill`, `globe.badge.clock.fill`. The last three are `.disabled(true)`: dimmed, a tap does nothing, no screens. Figma's reference is [here](tabbar-figma.jpg); the app is [402 pt](tabbar-402.jpg) and [390 pt](tabbar-390.jpg).
+The custom bar is replaced by the standard Apple `TabView` (`ContentView`): Home, History, Violations, Restrictions as in Figma node 490:26372. SF Symbols (as in Figma): `house`, `calendar.badge.clock`, `exclamationmark.circle.fill`, `globe.badge.clock.fill`. History, Violations and Restrictions are `.disabled(true)`: dimmed, a tap does nothing, no screens. Icons and labels are white in Light and Dark mode, the selected Home tab included (`.toolbarColorScheme(.dark, for: .tabBar)` and `.tint(white)`); the selection is the system's own highlight, not orange. Figma reference: [here](tabbar-figma.jpg) (it shows the orange pill, which Serhii overrode); app: [402 pt](tabbar-402.jpg), [390 pt](tabbar-390.jpg).
 
-- Differences from Figma: the native bar floats on system glass and marks the selected tab with an orange icon and label on neutral glass, not Figma's orange filled capsule.
-- Accepted: SwiftUI does not give the dimmed tabs the accessibility "not enabled" trait, so VoiceOver does not say "dimmed" and the audit reports "Missing trait: UIAccessibilityTraitNotEnabled" for them. The audit tests ignore exactly that issue for History, Violations and Restrictions.
-- Open: with the native bar the audit flags one or two texts on the past **empty** day on some runs at 402 pt (measured contrast about 11:1; the same state was clean 3 of 3 times with the previous custom bar). The empty-day audit is therefore a non-strict expected failure in `testAccessibilityAuditOfPastDays`; filled day and Rest tab stay strict.
-- Empty-day placeholders in the work and rest cards are now "?" (they were "--:--") on past days; Home today keeps "--:--".
+Accepted audit exclusion (temporary): SwiftUI gives the dimmed tabs no "not enabled" trait, so VoiceOver does not say "dimmed" and the audit reports "Missing trait: UIAccessibilityTraitNotEnabled" for them. `TachoBookUITests/AccessibilityAuditSupport.swift` ignores exactly that issue for the three tab buttons (audit type `.trait`, description contains `UIAccessibilityTraitNotEnabled`, element a button labelled History, Violations or Restrictions). Every other issue still fails. Remove it when those tabs become active.
+
+Open and accepted by Serhii: with the native bar the audit flags one or two texts on the past empty day on some runs at 402 pt (measured contrast about 11:1; clean 3 of 3 with the old bar). That one audit step is a non-strict expected failure; the filled day and Rest tab audits are strict.
+
+## Text colours (F9, 2026-10-20)
+
+Text has two named colours, identical in Light and Dark mode, defined once in `TachoTheme` (`Color.tachoTextOnLight`, `Color.tachoTextOnDark`), from the Figma variables read with `get_variable_defs`:
+
+| Colour | Figma variable | Value | Where |
+|---|---|---|---|
+| `tachoTextOnLight` | `Labels/Primary` | #072B3C | cards, Work/Rest switch, Day summary, sheets, light chips (Start at / dimmed Start of day) |
+| `tachoTextOnDark` | `Grays/White` | #FFFFFF | header day and date, date strip, Today button, history hint, tab bar, filled buttons (Start of day, End of day, sheet confirm) |
+
+Orange (#E8652A, `orangeStrong`) stays on fills only: icon badges, gauge arc, filled buttons, sheet grabber and confirm. No text is orange. Places where Figma or the earlier build used another text colour, now following the rule:
+
+| Place | Was | Now |
+|---|---|---|
+| Rest card title and subtitle ("Weekly Rest", "Closed 18 Oct …"), card titles ("Day summary", "Last Shift Summary", "Next rest …") | blue #116B93 / #083F58 | navy |
+| Red remaining time under the gauge (00:15) | red #A3322B | navy (the exclamation icon stays) |
+| "Start at / End at" chip text on the green chip | green #1F4A31 | navy |
+| Dimmed "Start of day" label | gray #4F4F4F | navy |
+| Sheet subtitle and the reason line | gray #727272 | navy |
+| Date strip, neighbouring dates (Figma 50 % / 25 % white) | solid 93 % / 86 % white | white (strip text is one colour; the circle marks the selection; unreachable dates no longer look dimmer) |
+| Work/Rest switch labels | system label colour (white in Dark mode on a light card) | navy in both modes (the switch is forced to the light scheme; `UISegmentedControl` title colour set in `TachoBookApp`) |
+| Today button and history hint fill | #083F58 | #072B3C (fill, text white) |
+
+No surface needed a third colour for AA: navy on the light card fill reaches 4.5:1 (unit test), white on the darkened photo header and on the navy/orange fills was already measured by the audit. Light and Dark screenshots: today [402](today-light-402.jpg) / [dark](today-dark-402.jpg), past day [402](past-light-402.jpg) / [dark](past-dark-402.jpg); 390 pt files have the same names with `-390`.
 
 ## Known differences and limits
 

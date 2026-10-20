@@ -23,6 +23,8 @@ struct HomeTabPicker: View {
                 .selectionDisabled(!isRestEnabled)
         }
         .pickerStyle(.segmented)
+        // The switch sits on a light card in both system appearances, so its text is dark navy in both.
+        .environment(\.colorScheme, .light)
         .labelsHidden()
         .frame(minWidth: 112, maxWidth: 136)
         .accessibilityIdentifier("homeTabPicker")
@@ -116,7 +118,7 @@ struct HomeMainWidget: View {
                         .fontWeight(["--:--", "?"].contains(limit.value) ? .black : nil)
                         .monospacedDigit()
                 }
-                .foregroundStyle(Color.tachoDark)
+                .foregroundStyle(Color.tachoTextOnLight)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .accessibilityElement(children: .combine)
@@ -141,9 +143,9 @@ enum HomeButtonStyle {
 
     var label: Color {
         switch self {
-        case .primary: .white
-        case .done: TachoTheme.doneLabel
-        case .dimmed: TachoTheme.dimmedLabel
+        case .primary: Color.tachoTextOnDark
+        case .done: Color.tachoTextOnLight
+        case .dimmed: Color.tachoTextOnLight
         }
     }
 }
@@ -212,7 +214,7 @@ struct HomeSecondaryCard<Item: View>: View {
             Label(title, systemImage: symbol)
                 .labelStyle(SpacedLabelStyle())
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(TachoTheme.blueText)
+                .foregroundStyle(Color.tachoTextOnLight)
                 .accessibilityAddTraits(.isHeader)
             let layout = dynamicTypeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(spacing: 16)) : AnyLayout(HStackLayout(spacing: 20))
@@ -267,7 +269,7 @@ struct HomeValueColumn: View {
             }
             .font(.headline)
         }
-        .foregroundStyle(Color.tachoDark)
+        .foregroundStyle(Color.tachoTextOnLight)
         .multilineTextAlignment(.center)
         .homeTextFit()
     }

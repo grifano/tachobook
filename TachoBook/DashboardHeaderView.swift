@@ -43,7 +43,7 @@ public struct DashboardHeaderView: View {
                         .contentTransition(.opacity)
                         .accessibilityIdentifier("headerDate")
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.tachoTextOnDark)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -51,11 +51,11 @@ public struct DashboardHeaderView: View {
                     Button(action: onToday) {
                         Text("Today")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.tachoTextOnDark)
                             .padding(.horizontal, 16)
                             .frame(minHeight: 44)
                             // Solid dark fill: translucent glass over the sky failed the contrast audit.
-                            .background(TachoTheme.blueText, in: Capsule())
+                            .background(Color.tachoTextOnLight, in: Capsule())
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -67,7 +67,7 @@ public struct DashboardHeaderView: View {
                 // Settings has no destination yet; shown as in Figma without navigation.
                 Image(systemName: "gear")
                     .font(.body.weight(.medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.tachoTextOnDark)
                     .frame(width: 44, height: 44)
                     .glassEffect(.regular.tint(Color.tachoBlue.opacity(0.5)), in: Circle())
                     .environment(\.colorScheme, .dark)
@@ -103,12 +103,6 @@ struct WeekDayItem: View {
     var onSelect: (Int) -> Void = { _ in }
     var onAdjust: (Int) -> Void = { _ in }
 
-    /// Figma fades neighbours to 50 % and 25 % opacity; solid lighter grays keep the
-    /// hierarchy with readable contrast (the audit rejects translucent text).
-    private var whiteLevel: Double {
-        isSelected ? 1 : (reach != nil ? 0.93 : 0.86)
-    }
-
     private var fullDate: String { day.date.formatted(date: .complete, time: .omitted) }
 
     var body: some View {
@@ -140,7 +134,7 @@ struct WeekDayItem: View {
             Text(day.date.formatted(.dateTime.weekday(.short)))
                 .font(.caption)
         }
-        .foregroundStyle(Color(white: whiteLevel))
+        .foregroundStyle(Color.tachoTextOnDark)
         .lineLimit(1)
         .minimumScaleFactor(0.7)
         .frame(maxWidth: .infinity, minHeight: 44)

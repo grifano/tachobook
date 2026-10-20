@@ -81,7 +81,7 @@ public struct DashboardView: View {
                             pastDayContent(now: now)
                         }
                         if let error = model.storageError {
-                            Text(error).font(.footnote).foregroundStyle(.white)
+                            Text(error).font(.footnote).foregroundStyle(Color.tachoTextOnDark)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -202,7 +202,7 @@ public struct DashboardView: View {
         }
         return HomeMainWidget(
             icon: "HomeWorkIcon", iconSize: CGSize(width: 40, height: 40),
-            title: "Work Time", subtitle: subtitle, accent: .tachoDark,
+            title: "Work Time", subtitle: subtitle, accent: .tachoTextOnLight,
             tab: tab, isRestEnabled: isRestEnabled,
             gauge: GaugeProgressView(
                 limit: "\(HomeTimeline.dutyMarkerHours.second)h",
@@ -228,7 +228,7 @@ public struct DashboardView: View {
                 icon: "HomeRestIcon", iconSize: CGSize(width: 40, height: 27),
                 title: kind == .weekly ? "Weekly Rest" : "Rest Time",
                 subtitle: "Closed \(HomeTimeline.dateLabel(restStart)) · \(HomeTimeline.clockLabel(restStart, relativeTo: restStart))",
-                accent: TachoTheme.blueText, tab: tab, isRestEnabled: true,
+                accent: Color.tachoTextOnLight, tab: tab, isRestEnabled: true,
                 gauge: GaugeProgressView(
                     limit: "\(kind.requiredHours)h",
                     value: HomeTimeline.clockDuration(seconds: elapsed),
@@ -408,7 +408,7 @@ public struct DashboardView: View {
             title: "Rest Taken",
             subtitle: rest.map { "Closed \(HomeTimeline.dateLabel($0.start)) · \(HomeTimeline.clockLabel($0.start, relativeTo: $0.start))" }
                 ?? HomeTimeline.dateLabel(day),
-            accent: TachoTheme.blueText, tab: tab, isRestEnabled: true,
+            accent: Color.tachoTextOnLight, tab: tab, isRestEnabled: true,
             gauge: GaugeProgressView(
                 limit: rest?.end == nil && rest != nil ? "So far" : "Taken",
                 value: rest.map { HomeTimeline.clockDuration(seconds: $0.seconds) } ?? placeholder,
@@ -427,7 +427,7 @@ public struct DashboardView: View {
     private func restCoverFooter(_ note: RestCoverNote, now: Date) -> AnyView {
         let text = Text("No shift this day \u{2014} you were resting since \(HomeTimeline.dayAndTime(note.restStart)).")
             .font(.footnote.weight(.medium))
-            .foregroundStyle(Color.tachoDark)
+            .foregroundStyle(Color.tachoTextOnLight)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -551,11 +551,11 @@ private struct LimitHint: View {
     var body: some View {
         Text(text)
             .font(.footnote.weight(.semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.tachoTextOnDark)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             // Same dark fill as the Today button, so the text keeps its contrast over the photo.
-            .background(TachoTheme.blueText, in: Capsule())
+            .background(Color.tachoTextOnLight, in: Capsule())
             .accessibilityIdentifier("historyLimitHint")
     }
 }

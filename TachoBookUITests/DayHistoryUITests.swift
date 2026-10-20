@@ -156,6 +156,26 @@ final class DayHistoryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["todayButton"].exists, "still on the past day")
     }
 
+    /// F9 and F7: text and the tab bar look the same in Light and Dark mode. The screenshots are for the
+    /// side-by-side review; the checks make sure the screens are the real Home, today and a past day.
+    @MainActor
+    func testHomeLooksTheSameInLightAndDarkMode() {
+        addTeardownBlock { XCUIDevice.shared.appearance = .light }
+        for (style, name) in [(XCUIDevice.Appearance.light, "Light"), (.dark, "Dark")] {
+            XCUIDevice.shared.appearance = style
+            let app = launch(reset: true)
+            XCTAssertTrue(app.buttons["summaryDayClosed"].waitForExistence(timeout: 5), name)
+            XCTAssertTrue(app.tabBars.firstMatch.buttons["Home"].isSelected, name)
+            Thread.sleep(forTimeInterval: 1)
+            attach("Today, \(name) mode")
+            app.swipeRight()
+            XCTAssertTrue(app.buttons["todayButton"].waitForExistence(timeout: 5), name)
+            Thread.sleep(forTimeInterval: 1)
+            attach("Past day, \(name) mode")
+            app.terminate()
+        }
+    }
+
     /// F3: a past day with no shift that a rest covers shows one line; a tap opens the day the rest started.
     @MainActor
     func testRestCoverNoteAndItsTap() {
@@ -364,11 +384,8 @@ final class DayHistoryUITests: XCTestCase {
     private func audit(_ app: XCUIApplication, _ state: String) throws {
         var issues: [String] = []
         try app.performAccessibilityAudit { issue in
-            // Accepted (Serhii, 2026-10-20): the native tab bar's dimmed tabs lack the "not enabled" trait.
-            if issue.compactDescription.contains("Missing trait"),
-               ["History", "Violations", "Restrictions"].contains(issue.element?.label ?? "") {
-                return true
-            }
+            // Temporary, see AccessibilityAuditSupport: the dimmed tabs lack the "not enabled" trait.
+            if issue.isNotEnabledTraitOnADisabledTab { return true }
             issues.append("\(issue.compactDescription): \(issue.element?.label ?? "unnamed node")")
             return true
         }

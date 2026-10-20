@@ -76,7 +76,7 @@ public struct TimeEntrySheet: View {
                 if let reason {
                     Text(reason)
                         .font(.footnote)
-                        .foregroundStyle(TachoTheme.sheetSubtitle)
+                        .foregroundStyle(Color.tachoTextOnLight)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 24)
@@ -88,7 +88,7 @@ public struct TimeEntrySheet: View {
             .animation(.default, value: check(date)?.message())
             Spacer(minLength: 24)
         }
-        .foregroundStyle(Color.tachoDark)
+        .foregroundStyle(Color.tachoTextOnLight)
         .environment(\.colorScheme, .light)
         .presentationDetents([.height(387)])
         .presentationDragIndicator(.hidden)
@@ -128,7 +128,7 @@ struct SheetToolbar: View {
                 Button(action: onCancel) {
                     Image(systemName: "xmark")
                         .font(.body.weight(.medium))
-                        .foregroundStyle(Color.tachoDark)
+                        .foregroundStyle(Color.tachoTextOnLight)
                         .frame(width: 44, height: 44)
                         .background(TachoTheme.sheetCloseFill, in: Circle())
                 }
@@ -138,11 +138,11 @@ struct SheetToolbar: View {
                 VStack(spacing: 0) {
                     Text(title)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.tachoDark)
+                        .foregroundStyle(Color.tachoTextOnLight)
                         .accessibilityAddTraits(.isHeader)
                     Text(subtitle)
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(TachoTheme.sheetSubtitle)
+                        .foregroundStyle(Color.tachoTextOnLight)
                 }
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -151,7 +151,7 @@ struct SheetToolbar: View {
                 Button(action: onConfirm) {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.tachoTextOnDark)
                         .frame(width: 44, height: 44)
                         .background(canConfirm ? Color.tachoOrange : TachoTheme.controlFill, in: Circle())
                 }
