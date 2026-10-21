@@ -414,7 +414,7 @@ public struct DashboardView: View {
             gauge: GaugeProgressView(
                 limit: rest?.end == nil && rest != nil ? "So far" : "Taken",
                 value: rest.map { HomeTimeline.clockDuration(seconds: $0.seconds) } ?? placeholder,
-                progress: 0, tint: .tachoBlue),
+                progress: HomeTimeline.restTakenFill(seconds: rest?.seconds), tint: .tachoBlue),
             limits: [
                 HomeLimit(label: "Rest started",
                           value: rest.map { HomeTimeline.clockLabel($0.start, relativeTo: day) } ?? placeholder),
