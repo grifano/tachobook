@@ -62,6 +62,14 @@ public enum HomeTimeline {
         return now.timeIntervalSince(restStart) >= weeklyDisplayAfter ? .weekly : .daily
     }
 
+    /// Fill of the past-day Rest Taken arc: rest taken against the 9 h daily scale, clamped to 0...1.
+    /// The scale is only a fill reference, not a rest classification. nil (no record) stays empty.
+    public static func restTakenFill(seconds: Int?) -> Double {
+        guard let seconds else { return 0 }
+        let scale = Double(RestKind.daily.requiredHours) * 3600
+        return min(max(Double(seconds) / scale, 0), 1)
+    }
+
     /// Start of day countdown; nil once the milestone is reached.
     public static func availabilityCountdown(restStart: Date, kind: RestKind, now: Date) -> String? {
         let available = adding(hours: kind.requiredHours, to: restStart)
