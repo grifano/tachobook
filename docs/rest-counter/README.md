@@ -4,6 +4,8 @@ Task: [TachoBook — Reduced Daily Rest Counter (0–3)](https://app.notion.com/
 Executor: Claude Code. Branch: `claude/reduced-rest-counter`. Base: `a0a3aba1a54f045a2c8a495d4e02efb80814bd83` (origin/main).
 Figma: [Main widget — Weekly Rest, 490:26367](https://www.figma.com/design/rpZZnwAC53fG7zjQy42Snq/TachoBook--UI-Design?node-id=490-26367) and [Main widget — Rest Time, 490:26319](https://www.figma.com/design/rpZZnwAC53fG7zjQy42Snq/TachoBook--UI-Design?node-id=490-26319). Figma values are sample content.
 
+> Superseded in part on 23.10.2026: the row is now always visible (beds on Rest, hammers on Work, today and past days; unknown shows all blue). See [home-count-row](../home-count-row/README.md). The counting rules below are unchanged; the "hidden" behaviour and the Work card's "no row before 13 h" no longer apply.
+
 ## What the driver gets
 
 - Three beds under the rest gauge, in the daily (Rest Time) and the weekly (Weekly Rest) card. Red beds, on the left, are reduced daily rests used since the last weekly rest; blue beds are still available.

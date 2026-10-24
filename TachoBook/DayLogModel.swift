@@ -109,6 +109,8 @@ public final class DayLogModel {
                 model.seedReducedRestsIfEmpty(used: used, restElapsed: restElapsed, now: Date(),
                                               openShiftElapsed: minutes("-seedOpenShiftMinutes"),
                                               closedShiftDuty: minutes("-seedDutyMinutes") ?? 3 * 3600)
+            } else if args.contains("-seedCountHistory"), model.isEmpty {
+                model.seedCountHistoryIfEmpty(now: Date())
             } else if args.contains("-seedDailyRestNearEleven"), model.isEmpty {
                 // A daily rest 20 s short of 11 h, to watch it switch to the weekly card.
                 let now = Date()
@@ -168,6 +170,30 @@ public final class DayLogModel {
                 ? DutyPeriod(date: currentStart, start: currentStart, drivingMinutes: 128, end: restStart,
                              isClosed: true, rests: [RestSegment(start: restStart, kind: .daily)])
                 : DutyPeriod(date: currentStart, start: currentStart, drivingMinutes: 128)
+        }
+    }
+
+    /// Past days for the Home row, independent of the time of day: a weekly rest ending 3 days ago 08:00, then
+    /// a 12 h shift and a 10 h (reduced) rest, a 14 h shift and a 10 h (reduced) rest, and yesterday's 10 h shift
+    /// closed at 16:00 with its rest still running. End of day: 3 days ago 0, 2 days ago 2 (pending past 13 h),
+    /// yesterday and today 2. Never replaces stored data.
+    public func seedCountHistoryIfEmpty(now: Date, calendar: Calendar = .current) {
+        guard isEmpty else { return }
+        let today = calendar.startOfDay(for: now)
+        func at(_ daysBack: Int, _ hour: Int) -> Date {
+            let day = calendar.date(byAdding: .day, value: -daysBack, to: today) ?? today
+            return calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day
+        }
+        let shifts = [(at(5, 6), at(5, 14)), (at(3, 8), at(3, 20)), (at(2, 6), at(2, 20)), (at(1, 6), at(1, 16))]
+        let periods = shifts.enumerated().map { index, shift in
+            let next = index + 1 < shifts.count ? shifts[index + 1].0 : nil
+            return DutyPeriod(date: shift.0, start: shift.0, drivingMinutes: 300, end: shift.1, isClosed: true,
+                              rests: [RestSegment(start: shift.1, end: next, dailyRestConfirmed: next.map { _ in true },
+                                                  kind: index == 0 ? .weekly : .daily)])
+        }
+        update { journal in
+            journal.history = Array(periods.dropLast())
+            journal.current = periods[periods.count - 1]
         }
     }
 

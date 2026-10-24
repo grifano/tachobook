@@ -1,6 +1,7 @@
 import XCTest
 
-/// Reduced daily rest beds under the rest gauge (Figma 490:26367, 490:26319).
+/// The always-visible row under the Home gauge: beds on the Rest view (Figma 490:26367, 490:26319),
+/// hammers on the Work view (564:39337), today and on past days.
 final class RestCountUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -55,31 +56,41 @@ final class RestCountUITests: XCTestCase {
     }
 
     @MainActor
-    func testBedsAreHiddenWithoutACompletedWeeklyRest() {
-        // The only record is a running rest: the count is unknown, never shown as 0 used.
+    func testUnknownCountShowsThreeBlueBeds() {
+        // The only record is a running rest: the count is unknown, never shown as 0 used, but the row stays.
         let app = launch(["-resetHomeFlowTest", "-seedReadyWeeklyRest"])
         XCTAssertTrue(app.staticTexts["Weekly Rest"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["homeGauge"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["reducedRestCount"].exists)
-        attach("count unknown, beds hidden")
+        let beds = app.descendants(matching: .any)["reducedRestCount"]
+        XCTAssertTrue(beds.waitForExistence(timeout: 5))
+        XCTAssertEqual(beds.label, "Reduced rests used: unknown")
+        attach("count unknown, three blue beds")
+        app.segmentedControls["homeTabPicker"].buttons["Work"].tap()
+        XCTAssertTrue(app.staticTexts["Work Time"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.descendants(matching: .any)["reducedRestCount"].label, "Extended shifts used: unknown")
+        attach("count unknown, three blue hammers")
     }
 
     @MainActor
-    func testWorkCardShowsThePendingBedOnlyAfterThirteenHours() {
-        // 12:59 of duty: no bed row on the Work card.
+    func testWorkCardShowsHammersBeforeAndAfterThirteenHours() {
+        // Regression (owner report 23.10.2026): 12:59 of duty, the row used to be hidden on the Work card.
         let before = launch(["-resetHomeFlowTest", "-seedReducedRests", "1", "-seedOpenShiftMinutes", "779"])
         XCTAssertTrue(before.staticTexts["Work Time"].waitForExistence(timeout: 5))
-        XCTAssertFalse(before.descendants(matching: .any)["reducedRestCount"].exists)
-        attach("work 12h59, no beds")
+        let hammers = before.descendants(matching: .any)["reducedRestCount"]
+        XCTAssertTrue(hammers.waitForExistence(timeout: 5))
+        XCTAssertEqual(hammers.label, "1 of 3 extended shifts used")
+        XCTAssertFalse(before.buttons["reducedRestCount"].exists)
+        XCTAssertEqual(hammers.frame.width, 70, accuracy: 0.5)
+        XCTAssertEqual(hammers.frame.midX, before.descendants(matching: .any)["homeGauge"].frame.midX, accuracy: 2)
+        attach("work 12h59, 1 used")
         before.terminate()
 
-        // 13:30: the reduction is certain, one more bed is red than the completed count.
+        // 13:30: the reduction is certain, one more hammer is red than the completed count.
         let after = launch(["-resetHomeFlowTest", "-seedReducedRests", "1", "-seedOpenShiftMinutes", "810"])
         XCTAssertTrue(after.staticTexts["Work Time"].waitForExistence(timeout: 5))
-        let beds = after.descendants(matching: .any)["reducedRestCount"]
-        XCTAssertTrue(beds.waitForExistence(timeout: 5))
-        XCTAssertEqual(beds.label, "2 of 3 reduced rests used")
-        attach("work 13h30, pending bed")
+        let pending = after.descendants(matching: .any)["reducedRestCount"]
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        XCTAssertEqual(pending.label, "2 of 3 extended shifts used")
+        attach("work 13h30, pending hammer")
         after.terminate()
 
         // 14:30: together with the last-hour warning (00:30 left), checked on the screenshots
@@ -90,16 +101,44 @@ final class RestCountUITests: XCTestCase {
             XCTAssertTrue(warning.descendants(matching: .any)["reducedRestCount"].waitForExistence(timeout: 5))
             let gauge = warning.descendants(matching: .any)["homeGauge"]
             XCTAssertTrue(gauge.label.contains("00:30"), gauge.label)
-            attach("work 14h30, pending bed and warning, \(size)")
+            attach("work 14h30, pending hammer and warning, \(size)")
             warning.terminate()
         }
+    }
+
+    @MainActor
+    func testPastDaysShowTheCountAtTheEndOfThatDay() {
+        // Two days ago: a 14 h shift after the first reduction — 2 at the end of the day; three days ago: 0.
+        for (daysBack, used) in [(2, 2), (3, 0)] {
+            let app = launch(["-resetHomeFlowTest", "-seedCountHistory", "-startDaysBack", "\(daysBack)"])
+            XCTAssertTrue(app.staticTexts["Work Time"].waitForExistence(timeout: 5))
+            let row = app.descendants(matching: .any)["reducedRestCount"]
+            XCTAssertTrue(row.waitForExistence(timeout: 5))
+            XCTAssertEqual(row.label, "\(used) of 3 extended shifts used")
+            attach("past day -\(daysBack), work, \(used) used")
+            app.segmentedControls["homeTabPicker"].buttons["Rest"].tap()
+            XCTAssertTrue(app.staticTexts["Rest Taken"].waitForExistence(timeout: 5))
+            XCTAssertEqual(app.descendants(matching: .any)["reducedRestCount"].label, "\(used) of 3 reduced rests used")
+            attach("past day -\(daysBack), rest, \(used) used")
+            app.terminate()
+        }
+        // Today, resting after yesterday's shift: the two completed reductions.
+        let today = launch(["-resetHomeFlowTest", "-seedCountHistory"])
+        XCTAssertTrue(today.descendants(matching: .any)["reducedRestCount"].waitForExistence(timeout: 5))
+        XCTAssertEqual(today.descendants(matching: .any)["reducedRestCount"].label, "2 of 3 reduced rests used")
+        today.segmentedControls["homeTabPicker"].buttons["Work"].tap()
+        XCTAssertTrue(today.staticTexts["Work Time"].waitForExistence(timeout: 5))
+        XCTAssertEqual(today.descendants(matching: .any)["reducedRestCount"].label, "2 of 3 extended shifts used")
     }
 
     @MainActor
     func testAccessibilityAuditWithBeds() throws {
         for (args, title) in [(["-seedReducedRests", "2", "-seedWeeklyCard"], "Weekly Rest"),
                               (["-seedReducedRests", "3"], "Rest Time"),
-                              (["-seedReducedRests", "1", "-seedOpenShiftMinutes", "870"], "Work Time")] {
+                              (["-seedReducedRests", "1", "-seedOpenShiftMinutes", "870"], "Work Time"),
+                              (["-seedReducedRests", "1", "-seedOpenShiftMinutes", "60"], "Work Time"),
+                              (["-seedReadyWeeklyRest"], "Weekly Rest"),
+                              (["-seedCountHistory", "-startDaysBack", "2"], "Work Time")] {
             let app = launch(["-resetHomeFlowTest"] + args)
             XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
             XCTAssertTrue(app.descendants(matching: .any)["reducedRestCount"].waitForExistence(timeout: 5))

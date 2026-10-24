@@ -84,14 +84,7 @@ public enum ReducedRestCounter {
     /// when the records contain no such boundary or a rest after it cannot be measured.
     /// A rest is counted once, when it ends: the rest after the latest record is still running.
     public static func usedCount(periods: [DutyPeriod]) -> Int? {
-        // Records with no times (for example a driving-only entry) take no part.
-        let timed = periods
-            .compactMap { period -> (key: Date, period: DutyPeriod)? in
-                guard let key = period.start ?? period.end else { return nil }
-                return (key, period)
-            }
-            .sorted { $0.key < $1.key }
-            .map(\.period)
+        let timed = timeline(periods)
         var used = 0
         for index in timed.indices.dropLast().reversed() {
             let period = timed[index]
@@ -104,6 +97,24 @@ public enum ReducedRestCounter {
             }
         }
         return nil
+    }
+
+    /// Records in time order. Records with no times (for example a driving-only entry) take no part.
+    static func timeline(_ periods: [DutyPeriod]) -> [DutyPeriod] {
+        periods
+            .compactMap { period -> (key: Date, period: DutyPeriod)? in
+                guard let key = period.start ?? period.end else { return nil }
+                return (key, period)
+            }
+            .sorted { $0.key < $1.key }
+            .map(\.period)
+    }
+
+    /// Red icons of the Home row (beds and hammers alike): the completed count plus the reduction the latest
+    /// record's duty past 13 h already makes certain, never a fourth. nil while the count is unknown.
+    public static func shownCount(periods: [DutyPeriod], latest: DutyPeriod, now: Date) -> Int? {
+        let used = usedCount(periods: periods)
+        return workCardCount(used: used, period: latest, now: now) ?? used
     }
 
     /// Duty past which an 11 h rest no longer fits in the 24 h window (owner decision 12, 20.10.2026).
@@ -120,8 +131,8 @@ public enum ReducedRestCounter {
         return !pauses(of: period).contains { isSplitFirst($0, anchor: anchor) }
     }
 
-    /// Beds shown red for the current shift: the completed count plus the pending reduction, never a fourth bed.
-    /// nil hides the row (count unknown, or no reduction pending). The stored count is unchanged.
+    /// The completed count plus the pending reduction of the current shift, never a fourth.
+    /// nil when the count is unknown or no reduction is pending. The stored count is unchanged.
     public static func workCardCount(used: Int?, period: DutyPeriod, now: Date) -> Int? {
         guard let used, isReductionPending(period: period, now: now) else { return nil }
         return used >= limit ? used : used + 1
@@ -147,16 +158,33 @@ extension DayLogModel {
     /// Derived from saved records, so it follows every history edit (R-E01) and relaunch.
     public var reducedRestsUsed: Int? { ReducedRestCounter.usedCount(periods: countedPeriods) }
 
-    /// Red beds for the Work card of the current shift: the count including the reduction its duty past
-    /// 13 h already makes certain; nil hides the row (decisions 12–13). Follows history edits (R-E01).
+    /// The count including the reduction the current shift's duty past 13 h already makes certain (decision 12);
+    /// nil when none is pending or the count is unknown. Follows history edits (R-E01).
     public func workCardReducedRests(now: Date) -> Int? {
         ReducedRestCounter.workCardCount(used: reducedRestsUsed, period: state.current, now: now)
     }
 
-    /// Red beds for the Rest card: during the rest after a shift past 13 h the reduction is already shown
-    /// (Serhii, 20.10.2026); otherwise the completed count, which changes when the rest ends. nil hides the row.
+    /// During the rest after a shift past 13 h the reduction is already shown (Serhii, 20.10.2026); otherwise
+    /// the completed count, which changes when the rest ends. nil while unknown.
     public func restCardReducedRests(now: Date) -> Int? {
         workCardReducedRests(now: now) ?? reducedRestsUsed
+    }
+
+    /// Red icons of today's Home row, the same on the Rest (beds) and Work (hammers) views; nil while the
+    /// count is unknown, shown as all blue. The row itself is always visible (owner decisions 1–3, 23.10.2026).
+    public func homeReducedRests(now: Date) -> Int? {
+        restCardReducedRests(now: now)
+    }
+
+    /// The Home row of a past `day` as it stood at the end of that day (owner decision 5): only the records
+    /// of that day and earlier, judged at its last second. Derived on every read, so it follows history edits.
+    public func reducedRests(endOf day: Date, now: Date, calendar: Calendar = .current) -> Int? {
+        let start = calendar.startOfDay(for: day)
+        let next = calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400)
+        let records = countedPeriods.filter { DayHistory.recordDay($0, calendar: calendar) <= start }
+        guard let latest = ReducedRestCounter.timeline(records).last else { return nil }
+        return ReducedRestCounter.shownCount(periods: records, latest: latest,
+                                             now: min(now, next.addingTimeInterval(-1)))
     }
 
     /// 13 vs 15 h for the current duty period (R-D05), for the Work card markers and the Resume flow.
