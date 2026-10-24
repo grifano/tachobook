@@ -48,7 +48,7 @@ final class RestCountUITests: XCTestCase {
         attach("rest after 14h shift, pending bed")
         long.terminate()
 
-        // 12 h shift: the bed turns red only when the rest ends.
+        // 12 h shift: the bed turns blue (used) only when the rest ends.
         let short = launch(["-resetHomeFlowTest", "-seedReducedRests", "1", "-seedDutyMinutes", "720"])
         XCTAssertTrue(short.staticTexts["Rest Time"].waitForExistence(timeout: 5))
         XCTAssertEqual(short.descendants(matching: .any)["reducedRestCount"].label, "1 of 3 reduced rests used")
@@ -56,18 +56,17 @@ final class RestCountUITests: XCTestCase {
     }
 
     @MainActor
-    func testUnknownCountShowsThreeBlueBeds() {
+    func testUnknownCountShowsThreeGrayBeds() {
         // The only record is a running rest: the count is unknown, never shown as 0 used, but the row stays.
         let app = launch(["-resetHomeFlowTest", "-seedReadyWeeklyRest"])
         XCTAssertTrue(app.staticTexts["Weekly Rest"].waitForExistence(timeout: 5))
         let beds = app.descendants(matching: .any)["reducedRestCount"]
         XCTAssertTrue(beds.waitForExistence(timeout: 5))
         XCTAssertEqual(beds.label, "Reduced rests used: unknown")
-        attach("count unknown, three blue beds")
-        app.segmentedControls["homeTabPicker"].buttons["Work"].tap()
-        XCTAssertTrue(app.staticTexts["Work Time"].waitForExistence(timeout: 5))
+        attach("count unknown, three gray beds")
+        select("Work", showing: "Work Time", in: app)
         XCTAssertEqual(app.descendants(matching: .any)["reducedRestCount"].label, "Extended shifts used: unknown")
-        attach("count unknown, three blue hammers")
+        attach("count unknown, three gray hammers")
     }
 
     @MainActor
@@ -84,7 +83,7 @@ final class RestCountUITests: XCTestCase {
         attach("work 12h59, 1 used")
         before.terminate()
 
-        // 13:30: the reduction is certain, one more hammer is red than the completed count.
+        // 13:30: the reduction is certain, one more hammer is used (blue) than the completed count.
         let after = launch(["-resetHomeFlowTest", "-seedReducedRests", "1", "-seedOpenShiftMinutes", "810"])
         XCTAssertTrue(after.staticTexts["Work Time"].waitForExistence(timeout: 5))
         let pending = after.descendants(matching: .any)["reducedRestCount"]
@@ -116,8 +115,7 @@ final class RestCountUITests: XCTestCase {
             XCTAssertTrue(row.waitForExistence(timeout: 5))
             XCTAssertEqual(row.label, "\(used) of 3 extended shifts used")
             attach("past day -\(daysBack), work, \(used) used")
-            app.segmentedControls["homeTabPicker"].buttons["Rest"].tap()
-            XCTAssertTrue(app.staticTexts["Rest Taken"].waitForExistence(timeout: 5))
+            select("Rest", showing: "Rest Taken", in: app)
             XCTAssertEqual(app.descendants(matching: .any)["reducedRestCount"].label, "\(used) of 3 reduced rests used")
             attach("past day -\(daysBack), rest, \(used) used")
             app.terminate()
@@ -126,8 +124,7 @@ final class RestCountUITests: XCTestCase {
         let today = launch(["-resetHomeFlowTest", "-seedCountHistory"])
         XCTAssertTrue(today.descendants(matching: .any)["reducedRestCount"].waitForExistence(timeout: 5))
         XCTAssertEqual(today.descendants(matching: .any)["reducedRestCount"].label, "2 of 3 reduced rests used")
-        today.segmentedControls["homeTabPicker"].buttons["Work"].tap()
-        XCTAssertTrue(today.staticTexts["Work Time"].waitForExistence(timeout: 5))
+        select("Work", showing: "Work Time", in: today)
         XCTAssertEqual(today.descendants(matching: .any)["reducedRestCount"].label, "2 of 3 extended shifts used")
     }
 
@@ -161,6 +158,17 @@ final class RestCountUITests: XCTestCase {
         app.launchArguments = ["-homeFlowUITest", "-UIPreferredContentSizeCategoryName", size] + extra
         app.launch()
         return app
+    }
+
+    /// Switches the Home view. Under parallel UI-test load a tap right after launch can land before the
+    /// picker settles, so it waits for the segment and taps once more if the card title does not change.
+    @MainActor
+    private func select(_ segment: String, showing title: String, in app: XCUIApplication) {
+        let button = app.segmentedControls["homeTabPicker"].buttons[segment]
+        XCTAssertTrue(button.waitForExistence(timeout: 5))
+        button.tap()
+        if !app.staticTexts[title].waitForExistence(timeout: 5) { button.tap() }
+        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5))
     }
 
     private func attach(_ name: String) {

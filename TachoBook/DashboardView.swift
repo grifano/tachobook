@@ -192,7 +192,7 @@ public struct DashboardView: View {
     }
 
     /// Work card for any shift. `elapsed` nil shows the "--:--" placeholder instead of zeros.
-    /// `reducedRestsUsed` is the red hammers of the always-visible row; nil (unknown) shows all blue.
+    /// `reducedRestsUsed` is the blue (used) hammers of the always-visible row; nil (unknown) shows all gray.
     private func workWidget(start: Date?, elapsed: Int?, instant: Date, subtitle: String,
                             isRestEnabled: Bool, labelsRelativeTo reference: Date,
                             placeholder: String = "--:--", reducedRestsUsed: Int?) -> some View {

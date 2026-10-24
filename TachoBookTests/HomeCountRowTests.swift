@@ -132,9 +132,9 @@ struct HomeCountRowTests {
         #expect(ReducedRestRow.label(icon: .hammer, used: nil) == "Extended shifts used: unknown")
     }
 
-    @Test func unknownShowsNoRedIcon() {
-        #expect(ReducedRestRow.redCount(used: nil) == 0)
-        #expect(ReducedRestRow.redCount(used: 2) == 2)
-        #expect(ReducedRestRow.redCount(used: 4) == 3)
+    @Test func unknownShowsNoUsedIcon() {
+        #expect(ReducedRestRow.usedIcons(used: nil) == 0)
+        #expect(ReducedRestRow.usedIcons(used: 2) == 2)
+        #expect(ReducedRestRow.usedIcons(used: 4) == 3)
     }
 }

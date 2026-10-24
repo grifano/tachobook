@@ -14,7 +14,7 @@ public struct GaugeProgressView: View {
     public var warning: String?
     /// Beds on the Rest view, hammers on the Work view (owner decision 3, 23.10.2026).
     public var countIcon: ReducedRestRow.Icon
-    /// Red icons in the always-visible row under the arc; nil while the count is unknown (all blue).
+    /// Used (blue) icons in the always-visible row under the arc; nil while the count is unknown (all gray).
     public var reducedRestsUsed: Int?
 
     public init(limit: String, value: String, progress: Double, tint: Color, warning: String? = nil,
@@ -87,8 +87,8 @@ public struct GaugeProgressView: View {
 }
 
 /// Figma "Rest Count", always shown on the Home main widget: three icons, 8 pt apart, on the gauge's
-/// bottom edge — 18 × 20 beds (490:26367) or 18 × 18 hammers (564:39337). Red icons (left) are reductions
-/// used, blue ones are still available; an unknown count shows all blue. Not interactive.
+/// bottom edge — 18 × 20 beds or 18 × 18 hammers (Figma 704:2659). Blue icons (left) are reductions used,
+/// gray ones are still available; an unknown count shows all gray. Not interactive.
 public struct ReducedRestRow: View {
     public enum Icon: Sendable {
         /// One reduced daily rest (9 h).
@@ -110,7 +110,7 @@ public struct ReducedRestRow: View {
                     .resizable()
                     .renderingMode(.template)
                     .frame(width: 18, height: icon.height)
-                    .foregroundStyle(index < Self.redCount(used: used) ? Color.tachoRed : Color.tachoBlue)
+                    .foregroundStyle(index < Self.usedIcons(used: used) ? Color.tachoBlue : TachoTheme.controlFill)
             }
         }
         // Hammers sit on the beds' baseline; the element keeps the bed row's 70 × 20 frame for VoiceOver.
@@ -122,8 +122,8 @@ public struct ReducedRestRow: View {
         .accessibilityIdentifier("reducedRestCount")
     }
 
-    /// Red icons, never more than three; none while the count is unknown.
-    static func redCount(used: Int?) -> Int {
+    /// Blue (used) icons, never more than three; none while the count is unknown.
+    static func usedIcons(used: Int?) -> Int {
         min(used ?? 0, ReducedRestCounter.limit)
     }
 

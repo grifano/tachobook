@@ -6,8 +6,8 @@ Figma: [Weekly Rest card with beds, 490:26367](https://www.figma.com/design/rpZZ
 
 ## What the driver gets
 
-- The row under the gauge is always there on the Home main widget: three beds on the Rest view, three hammers on the Work view. A bed is one reduced daily rest (9 h); a hammer is one extended duty period (up to 15 h). One reduction = one red bed = one red hammer, so both views always show the same number of red icons.
-- While the count is unknown (no completed weekly rest in the records) all icons are blue. Internally the count and the 15 h availability stay unknown (R-U01, P2).
+- The row under the gauge is always there on the Home main widget: three beds on the Rest view, three hammers on the Work view. A bed is one reduced daily rest (9 h); a hammer is one extended duty period (up to 15 h). One reduction = one used bed = one used hammer, so both views always show the same number of used icons. Colours (Serhii, Figma [704:2659](https://www.figma.com/design/rpZZnwAC53fG7zjQy42Snq/TachoBook--UI-Design?node-id=704-2659), 24.10.2026): used = blue `#116B93`, available = gray `#787878` at 40 % (`TachoTheme.controlFill`); this replaces the earlier red/blue.
+- While the count is unknown (no completed weekly rest in the records) all icons are gray. Internally the count and the 15 h availability stay unknown (R-U01, P2).
 - Earlier days in the date strip show the row as it stood at the end of that day: only the records of that day and earlier count. A history edit recomputes every day after it (R-E01).
 - VoiceOver: "1 of 3 reduced rests used" / "1 of 3 extended shifts used"; "Reduced rests used: unknown" / "Extended shifts used: unknown"; "4 … used, limit 3" after a fourth reduction.
 
@@ -28,14 +28,14 @@ Fix: Home uses one value for both views (`homeReducedRests(now:)`: completed cou
 | Counting | Unchanged from PR #11 (see [rest-counter](../rest-counter/README.md)): the completed count since the last rest ≥ 24 h, plus the pending reduction of a shift past 13 h without a confirmed split. |
 | Today | Rest and Work views both show `homeReducedRests(now:)` (the former Rest card value). |
 | Past day | `reducedRests(endOf:now:)`: records whose day (Day started, else the record's date) is that day or earlier, judged at 23:59:59 of that day — what Home showed at the end of that day. A rest that ends the next morning is not yet counted; a shift past 13 h already shows its reduction on its own day. |
-| Unknown | All three icons blue; `reducedRestsUsed` and `dutyLimitAvailability` stay unknown. |
+| Unknown | All three icons gray; `reducedRestsUsed` and `dutyLimitAvailability` stay unknown. |
 | Edits | Derived on every read, so history edits and relaunches recompute today and every past day. |
 
 Example from the owner's week: 21.10 → 0 (the 9 h 08 rest is still running at midnight), 22.10 → 1, 23.10 → 2 (13 h 59 shift), 24.10 → 3 (13 h 38 shift, resting).
 
 ## Screenshots
 
-Simulator iPhone 17 Pro (402 pt) and "TachoBook Home 390" (390 pt), iOS 26.5, from `RestCountUITests`. Figma: Rest ![490:26367](../rest-counter/figma-490-26367.png) Work ![564:39337](figma-564-39337.png)
+Simulator iPhone 17 Pro (402 pt) and "TachoBook Home 390" (390 pt), iOS 26.5, from `RestCountUITests`. Figma (colours updated 24.10.2026): ![704:2659](figma-704-2659.png)
 
 | State | 402 pt | 390 pt |
 |---|---|---|
@@ -44,10 +44,10 @@ Simulator iPhone 17 Pro (402 pt) and "TachoBook Home 390" (390 pt), iOS 26.5, fr
 | Today, Work at 13:30, pending reduction (2) | ![](today-work-13h30-pending-402.jpg) | ![](today-work-13h30-pending-390.jpg) |
 | Past day (2 days ago), Work, 2 used | ![](past-day-work-2-used-402.jpg) | ![](past-day-work-2-used-390.jpg) |
 | Past day (2 days ago), Rest Taken, 2 used | ![](past-day-rest-2-used-402.jpg) | ![](past-day-rest-2-used-390.jpg) |
-| Unknown count, Rest: three blue beds | ![](unknown-rest-402.jpg) | ![](unknown-rest-390.jpg) |
-| Unknown count, Work: three blue hammers | ![](unknown-work-402.jpg) | ![](unknown-work-390.jpg) |
+| Unknown count, Rest: three gray beds | ![](unknown-rest-402.jpg) | ![](unknown-rest-390.jpg) |
+| Unknown count, Work: three gray hammers | ![](unknown-work-402.jpg) | ![](unknown-work-390.jpg) |
 
-The hammers are 18 × 18 pt as in Figma 564:39337 (the task text said 18 × 20; Figma wins), bottom-aligned with the beds' baseline, 8 pt apart (26 pt step), row 70 pt wide and centred under the gauge. The accessibility element keeps the bed row's 70 × 20 frame: at 18 pt the audit flagged its hit area.
+The hammers are 18 × 18 pt as in Figma 564:39337 / 704:2659 (the task text said 18 × 20; Figma wins), bottom-aligned with the beds' baseline, 8 pt apart (26 pt step), row 70 pt wide and centred under the gauge. The accessibility element keeps the bed row's 70 × 20 frame: at 18 pt the audit flagged its hit area.
 
 ## Debug launch arguments
 

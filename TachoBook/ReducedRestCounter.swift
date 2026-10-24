@@ -110,7 +110,7 @@ public enum ReducedRestCounter {
             .map(\.period)
     }
 
-    /// Red icons of the Home row (beds and hammers alike): the completed count plus the reduction the latest
+    /// Used (blue) icons of the Home row (beds and hammers alike): the completed count plus the reduction the latest
     /// record's duty past 13 h already makes certain, never a fourth. nil while the count is unknown.
     public static func shownCount(periods: [DutyPeriod], latest: DutyPeriod, now: Date) -> Int? {
         let used = usedCount(periods: periods)
@@ -170,8 +170,8 @@ extension DayLogModel {
         workCardReducedRests(now: now) ?? reducedRestsUsed
     }
 
-    /// Red icons of today's Home row, the same on the Rest (beds) and Work (hammers) views; nil while the
-    /// count is unknown, shown as all blue. The row itself is always visible (owner decisions 1–3, 23.10.2026).
+    /// Used (blue) icons of today's Home row, the same on the Rest (beds) and Work (hammers) views; nil while
+    /// the count is unknown, shown as all gray. The row itself is always visible (owner decisions 1–3, 23.10.2026).
     public func homeReducedRests(now: Date) -> Int? {
         restCardReducedRests(now: now)
     }
