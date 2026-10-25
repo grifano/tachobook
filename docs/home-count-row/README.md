@@ -6,7 +6,7 @@ Figma: [Weekly Rest card with beds, 490:26367](https://www.figma.com/design/rpZZ
 
 ## What the driver gets
 
-- The row under the gauge is always there on the Home main widget: three beds on the Rest view, three hammers on the Work view. A bed is one reduced daily rest (9 h); a hammer is one extended duty period (up to 15 h). One reduction = one used bed = one used hammer, so both views always show the same number of used icons. Colours (Serhii, Figma [704:2659](https://www.figma.com/design/rpZZnwAC53fG7zjQy42Snq/TachoBook--UI-Design?node-id=704-2659), 24.10.2026): used = blue `#116B93`, available = gray `#787878` at 40 % (`TachoTheme.controlFill`); this replaces the earlier red/blue.
+- The row under the gauge is always there on the Home main widget: three beds on the Rest view, three hammers on the Work view. A bed is one reduced daily rest (9 h); a hammer is one extended duty period (up to 15 h). One reduction = one used bed = one used hammer, so both views always show the same number of used icons. Colours (Serhii, Figma [704:2659](https://www.figma.com/design/rpZZnwAC53fG7zjQy42Snq/TachoBook--UI-Design?node-id=704-2659), 24.10.2026): used beds = blue `#116B93`, used hammers = orange (the Work gauge colour, 25.10.2026), available = gray `#787878` at 40 % (`TachoTheme.controlFill`); this replaces the earlier red/blue.
 - While the count is unknown (no completed weekly rest in the records) all icons are gray. Internally the count and the 15 h availability stay unknown (R-U01, P2).
 - Earlier days in the date strip show the row as it stood at the end of that day: only the records of that day and earlier count. A history edit recomputes every day after it (R-E01).
 - VoiceOver: "1 of 3 reduced rests used" / "1 of 3 extended shifts used"; "Reduced rests used: unknown" / "Extended shifts used: unknown"; "4 … used, limit 3" after a fourth reduction.
@@ -35,7 +35,7 @@ Example from the owner's week: 21.10 → 0 (the 9 h 08 rest is still running at 
 
 ## Screenshots
 
-Simulator iPhone 17 Pro (402 pt) and "TachoBook Home 390" (390 pt), iOS 26.5, from `RestCountUITests`. Figma (colours updated 24.10.2026): ![704:2659](figma-704-2659.png)
+Screenshots taken before the hammers turned orange (25.10.2026). Simulator iPhone 17 Pro (402 pt) and "TachoBook Home 390" (390 pt), iOS 26.5, from `RestCountUITests`. Figma (colours updated 24.10.2026): ![704:2659](figma-704-2659.png)
 
 | State | 402 pt | 390 pt |
 |---|---|---|

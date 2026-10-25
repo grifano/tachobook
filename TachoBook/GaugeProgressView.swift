@@ -87,8 +87,8 @@ public struct GaugeProgressView: View {
 }
 
 /// Figma "Rest Count", always shown on the Home main widget: three icons, 8 pt apart, on the gauge's
-/// bottom edge — 18 × 20 beds or 18 × 18 hammers (Figma 704:2659). Blue icons (left) are reductions used,
-/// gray ones are still available; an unknown count shows all gray. Not interactive.
+/// bottom edge — 18 × 20 beds or 18 × 18 hammers (Figma 704:2659). Used icons (left) take the gauge colour
+/// (blue beds, orange hammers), available ones are gray; an unknown count shows all gray. Not interactive.
 public struct ReducedRestRow: View {
     public enum Icon: Sendable {
         /// One reduced daily rest (9 h).
@@ -97,6 +97,8 @@ public struct ReducedRestRow: View {
         case hammer
 
         var asset: String { self == .bed ? "RestCountIcon" : "WorkCountIcon" }
+        /// A used icon takes its gauge's colour: blue beds on Rest, orange hammers on Work.
+        var usedColor: Color { self == .bed ? .tachoBlue : .tachoOrange }
         var height: CGFloat { self == .bed ? 19.983 : 18 }
     }
 
@@ -110,7 +112,7 @@ public struct ReducedRestRow: View {
                     .resizable()
                     .renderingMode(.template)
                     .frame(width: 18, height: icon.height)
-                    .foregroundStyle(index < Self.usedIcons(used: used) ? Color.tachoBlue : TachoTheme.controlFill)
+                    .foregroundStyle(index < Self.usedIcons(used: used) ? icon.usedColor : TachoTheme.controlFill)
             }
         }
         // Hammers sit on the beds' baseline; the element keeps the bed row's 70 × 20 frame for VoiceOver.
