@@ -84,19 +84,33 @@ public enum ReducedRestCounter {
     /// when the records contain no such boundary or a rest after it cannot be measured.
     /// A rest is counted once, when it ends: the rest after the latest record is still running.
     public static func usedCount(periods: [DutyPeriod]) -> Int? {
+        reducedPeriodIDs(periods: periods)?.count
+    }
+
+    /// The records whose completed rest counts as reduced since the last weekly rest, newest first;
+    /// nil when `usedCount` is unknown.
+    static func reducedPeriodIDs(periods: [DutyPeriod]) -> [UUID]? {
         let timed = timeline(periods)
-        var used = 0
+        var reduced: [UUID] = []
         for index in timed.indices.dropLast().reversed() {
             let period = timed[index]
             guard let anchor = period.start, let restStart = period.end,
                   let restEnd = timed[index + 1].start else { return nil }
             switch classify(anchor: anchor, pauses: pauses(of: period), restStart: restStart, restEnd: restEnd) {
-            case .weekly: return used
-            case .reduced: used += 1
+            case .weekly: return reduced
+            case .reduced: reduced.append(period.id)
             case .regular, .split, .shortfall: break
             }
         }
         return nil
+    }
+
+    /// The reductions behind `shownCount`: each named by the record whose rest it is, the pending one included.
+    /// nil while the count is unknown.
+    public static func shownReductionIDs(periods: [DutyPeriod], latest: DutyPeriod, now: Date) -> Set<UUID>? {
+        guard let reduced = reducedPeriodIDs(periods: periods) else { return nil }
+        let pending = workCardCount(used: reduced.count, period: latest, now: now).map { $0 > reduced.count } ?? false
+        return Set(reduced + (pending ? [latest.id] : []))
     }
 
     /// Records in time order. Records with no times (for example a driving-only entry) take no part.
@@ -179,12 +193,27 @@ extension DayLogModel {
     /// The Home row of a past `day` as it stood at the end of that day (owner decision 5): only the records
     /// of that day and earlier, judged at its last second. Derived on every read, so it follows history edits.
     public func reducedRests(endOf day: Date, now: Date, calendar: Calendar = .current) -> Int? {
+        endOfDay(day, now: now, calendar: calendar) { records, latest, instant in
+            ReducedRestCounter.shownCount(periods: records, latest: latest, now: instant)
+        }
+    }
+
+    /// The reductions the Home row of a past `day` counts (decision 5), named by the record whose rest it is.
+    /// Their number equals `reducedRests(endOf:now:)`; nil while that count is unknown.
+    public func reductionIDs(endOf day: Date, now: Date, calendar: Calendar = .current) -> Set<UUID>? {
+        endOfDay(day, now: now, calendar: calendar) { records, latest, instant in
+            ReducedRestCounter.shownReductionIDs(periods: records, latest: latest, now: instant)
+        }
+    }
+
+    /// Only the records of `day` and earlier, judged at its last second (or `now`, if earlier).
+    private func endOfDay<T>(_ day: Date, now: Date, calendar: Calendar,
+                             _ judge: ([DutyPeriod], DutyPeriod, Date) -> T?) -> T? {
         let start = calendar.startOfDay(for: day)
         let next = calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400)
         let records = countedPeriods.filter { DayHistory.recordDay($0, calendar: calendar) <= start }
         guard let latest = ReducedRestCounter.timeline(records).last else { return nil }
-        return ReducedRestCounter.shownCount(periods: records, latest: latest,
-                                             now: min(now, next.addingTimeInterval(-1)))
+        return judge(records, latest, min(now, next.addingTimeInterval(-1)))
     }
 
     /// 13 vs 15 h for the current duty period (R-D05), for the Work card markers and the Resume flow.
