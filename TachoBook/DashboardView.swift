@@ -195,7 +195,8 @@ public struct DashboardView: View {
     /// `reducedRestsUsed` is the blue (used) hammers of the always-visible row; nil (unknown) shows all gray.
     private func workWidget(start: Date?, elapsed: Int?, instant: Date, subtitle: String,
                             isRestEnabled: Bool, labelsRelativeTo reference: Date,
-                            placeholder: String = "--:--", reducedRestsUsed: Int?) -> some View {
+                            placeholder: String = "--:--", limitHours: Int = HomeTimeline.dutyMarkerHours.second,
+                            reducedRestsUsed: Int?) -> some View {
         let markers = start.map { HomeTimeline.dutyMarkers(shiftStart: $0) }
         let warning = start.flatMap { start in
             elapsed != nil && HomeTimeline.isDutyWarning(shiftStart: start, at: instant)
@@ -207,7 +208,7 @@ public struct DashboardView: View {
             title: "Work Time", subtitle: subtitle, accent: .tachoTextOnLight,
             tab: tab, isRestEnabled: isRestEnabled,
             gauge: GaugeProgressView(
-                limit: "\(HomeTimeline.dutyMarkerHours.second)h",
+                limit: "\(limitHours)h",
                 value: elapsed.map { HomeTimeline.clockDuration(seconds: $0) } ?? placeholder,
                 progress: Double(elapsed ?? 0) / (Double(HomeTimeline.dutyMarkerHours.second) * 3600),
                 tint: .tachoOrange, warning: warning, countIcon: .hammer, reducedRestsUsed: reducedRestsUsed),
@@ -401,7 +402,8 @@ public struct DashboardView: View {
         let subtitle = start.map { "\(HomeTimeline.dateLabel($0)) · Started \(HomeTimeline.clockLabel($0, relativeTo: $0))" }
             ?? HomeTimeline.dateLabel(day)
         return workWidget(start: start, elapsed: elapsed, instant: end ?? now, subtitle: subtitle,
-                          isRestEnabled: true, labelsRelativeTo: day, placeholder: "?", reducedRestsUsed: reducedRestsUsed)
+                          isRestEnabled: true, labelsRelativeTo: day, placeholder: "?",
+                          limitHours: HomeTimeline.pastDutyLimitHours(seconds: elapsed), reducedRestsUsed: reducedRestsUsed)
     }
 
     /// The Rest card layout for a past day: time taken after the shift, without 9/11/24/45 h markers.
@@ -414,7 +416,7 @@ public struct DashboardView: View {
                 ?? HomeTimeline.dateLabel(day),
             accent: Color.tachoTextOnLight, tab: tab, isRestEnabled: true,
             gauge: GaugeProgressView(
-                limit: rest?.end == nil && rest != nil ? "So far" : "Taken",
+                limit: HomeTimeline.restTakenLabel(rest),
                 value: rest.map { HomeTimeline.clockDuration(seconds: $0.seconds) } ?? placeholder,
                 progress: HomeTimeline.restTakenFill(seconds: rest?.seconds), tint: .tachoBlue,
                 countIcon: .bed, reducedRestsUsed: reducedRestsUsed),

@@ -84,19 +84,33 @@ public enum ReducedRestCounter {
     /// when the records contain no such boundary or a rest after it cannot be measured.
     /// A rest is counted once, when it ends: the rest after the latest record is still running.
     public static func usedCount(periods: [DutyPeriod]) -> Int? {
+        reducedPeriodIDs(periods: periods)?.count
+    }
+
+    /// The records whose completed rest counts as reduced since the last weekly rest, newest first;
+    /// nil when `usedCount` is unknown.
+    static func reducedPeriodIDs(periods: [DutyPeriod]) -> [UUID]? {
         let timed = timeline(periods)
-        var used = 0
+        var reduced: [UUID] = []
         for index in timed.indices.dropLast().reversed() {
             let period = timed[index]
             guard let anchor = period.start, let restStart = period.end,
                   let restEnd = timed[index + 1].start else { return nil }
             switch classify(anchor: anchor, pauses: pauses(of: period), restStart: restStart, restEnd: restEnd) {
-            case .weekly: return used
-            case .reduced: used += 1
+            case .weekly: return reduced
+            case .reduced: reduced.append(period.id)
             case .regular, .split, .shortfall: break
             }
         }
         return nil
+    }
+
+    /// The reductions behind `shownCount`: each named by the record whose rest it is, the pending one included.
+    /// nil while the count is unknown.
+    public static func shownReductionIDs(periods: [DutyPeriod], latest: DutyPeriod, now: Date) -> Set<UUID>? {
+        guard let reduced = reducedPeriodIDs(periods: periods) else { return nil }
+        let pending = workCardCount(used: reduced.count, period: latest, now: now).map { $0 > reduced.count } ?? false
+        return Set(reduced + (pending ? [latest.id] : []))
     }
 
     /// Records in time order. Records with no times (for example a driving-only entry) take no part.

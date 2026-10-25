@@ -70,6 +70,31 @@ public enum HomeTimeline {
         return min(max(Double(seconds) / scale, 0), 1)
     }
 
+    /// Gauge label of a finished shift on a past day (Serhii, 25.10.2026): 13 h up to 13 h of duty, 15 h beyond.
+    /// nil duty (no shift) keeps the 15 h scale.
+    public static func pastDutyLimitHours(seconds: Int?) -> Int {
+        guard let seconds else { return dutyMarkerHours.second }
+        return TimeInterval(seconds) > TimeInterval(dutyMarkerHours.first) * 3600 ? dutyMarkerHours.second : dutyMarkerHours.first
+    }
+
+    /// The rest norm a finished rest reached, by its length (Serhii, 25.10.2026): under 11 h → 9 h, 11 h up to
+    /// 24 h → 11 h, 24 h up to 45 h → 24 h, 45 h or more → 45 h.
+    public static func restNormHours(seconds: Int) -> Int {
+        switch seconds {
+        case (45 * 3600)...: 45
+        case (24 * 3600)...: 24
+        case (11 * 3600)...: 11
+        default: 9
+        }
+    }
+
+    /// Label above a past day's rest: "So far" while it runs, its norm once it ended, "Taken" without a rest.
+    public static func restTakenLabel(_ rest: RestTaken?) -> String {
+        guard let rest else { return "Taken" }
+        guard rest.end != nil else { return "So far" }
+        return "\(restNormHours(seconds: rest.seconds))h"
+    }
+
     /// Start of day countdown; nil once the milestone is reached.
     public static func availabilityCountdown(restStart: Date, kind: RestKind, now: Date) -> String? {
         let available = adding(hours: kind.requiredHours, to: restStart)

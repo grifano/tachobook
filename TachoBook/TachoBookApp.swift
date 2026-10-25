@@ -16,7 +16,7 @@ struct TachoBookApp: App {
             UISegmentedControl.appearance().setTitleTextAttributes([.foregroundColor: navy], for: state)
         }
 
-        // Tab bar: the disabled tabs (History, Violations, Restrictions) are white like the active one,
+        // Tab bar: the disabled tabs (Violations, Restrictions) are white like the active ones,
         // not dimmed (Serhii, 2026-10-20). They stay disabled: a tap does nothing.
         let white = UIColor(Color.tachoTextOnDark)
         let item = UITabBarItemAppearance()
