@@ -8,8 +8,10 @@ Frame 03 `708:31874` (violations) is out of scope.
 
 - History tab is active (Violations and Restrictions stay inert). Home and History share one `DayLogModel`.
 - Native `UICalendarView` (`HistoryCalendar`, `UIViewRepresentable`): current month, month arrows, future dates
-  outside `availableDateRange` (dimmed, not selectable). A tap opens the sheet; the selection is cleared at once,
-  so the same date can be tapped again.
+  outside `availableDateRange` (dimmed, not selectable). Per Serhii (25.10.2026) the grid is drawn smaller and with
+  more room at the card edges: `ScaledToWidth` lays the calendar out 1/0.88 wider and `scaleEffect(0.88)` draws it
+  in the card width (12 pt side inset), so Dynamic Type, taps and VoiceOver frames keep working.
+  A tap opens the sheet; the selection is cleared at once, so the same date can be tapped again.
 - Markers (`HistoryMarkers.swift`), derived from stored records on every read:
   - **Bed** (`bed.double.fill`): the day the Home row of PR #13 gains a reduction — `reductionIDs(endOf:)` of
     the day contains a reduction that the previous day's set does not. That is the day the reduced rest ended,
@@ -35,6 +37,7 @@ Frame 03 `708:31874` (violations) is out of scope.
 
 ## Known gaps against Figma
 
+- Day numbers are drawn at 88 % of the system size (about 18 pt instead of Figma's 20 pt), at Serhii's request.
 - Native calendar look: rows are taller (UIKit reserves space for decorations), weekday headers are system
   gray, day numbers are system black, and the week starts on the device's first weekday.
 - Today is navy (tint), not orange: F9 allows only navy text on light surfaces.

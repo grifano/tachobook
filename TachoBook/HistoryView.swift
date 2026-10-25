@@ -41,10 +41,16 @@ struct HistoryView: View {
 
     private func calendarCard(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HistoryCalendar(markers: model.historyMarkers(now: now), today: now) { date in
-                summaryDay = SummaryDay(date: date)
+            ScaledToWidth(scale: HistoryCalendar.scale) {
+                HistoryCalendar(markers: model.historyMarkers(now: now), today: now) { date in
+                    summaryDay = SummaryDay(date: date)
+                }
+                .scaleEffect(HistoryCalendar.scale)
             }
             .accessibilityIdentifier("historyCalendar")
+            // Room at the card edges so the grid does not run up against the border (Serhii, 25.10.2026).
+            .padding(.horizontal, HistoryCalendar.inset)
+            .padding(.top, 8)
             FadedRule().frame(height: 1).padding(.horizontal, 16)
             HistoryLegend()
                 .padding(.horizontal, 16)
@@ -127,7 +133,15 @@ struct HistoryCalendar: UIViewRepresentable {
     var today: Date
     var onSelect: (Date) -> Void
 
+    /// Space between the card border and the calendar grid.
+    static let inset: CGFloat = 12
+
     func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    /// Smaller day numbers than the system default (Serhii, 25.10.2026). The calendar is laid out wider and drawn
+    /// at this scale (`ScaledToWidth`), so it still follows Dynamic Type; a content-size trait override confused
+    /// the accessibility audit.
+    static let scale: CGFloat = 0.88
 
     func makeUIView(context: Context) -> UICalendarView {
         let view = UICalendarView()
@@ -207,6 +221,24 @@ struct HistoryCalendar: UIViewRepresentable {
             guard let dateComponents, let date = calendarView?.calendar.date(from: dateComponents) else { return false }
             return date <= parent.today
         }
+    }
+}
+
+/// Lays out its one child `1 / scale` times wider than offered and reports the child's size times `scale`;
+/// the child applies `scaleEffect(scale)`, so it is drawn exactly in the offered width.
+struct ScaledToWidth: Layout {
+    var scale: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let child = subviews.first else { return .zero }
+        let width = proposal.width ?? 370
+        let size = child.sizeThatFits(ProposedViewSize(width: width / scale, height: nil))
+        return CGSize(width: width, height: size.height * scale)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center,
+                              proposal: ProposedViewSize(width: bounds.width / scale, height: bounds.height / scale))
     }
 }
 
