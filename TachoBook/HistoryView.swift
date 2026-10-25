@@ -41,11 +41,8 @@ struct HistoryView: View {
 
     private func calendarCard(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            ScaledToWidth(scale: HistoryCalendar.scale) {
-                HistoryCalendar(markers: model.historyMarkers(now: now), today: now) { date in
-                    summaryDay = SummaryDay(date: date)
-                }
-                .scaleEffect(HistoryCalendar.scale)
+            HistoryCalendar(markers: model.historyMarkers(now: now), today: now) { date in
+                summaryDay = SummaryDay(date: date)
             }
             .accessibilityIdentifier("historyCalendar")
             // Room at the card edges so the grid does not run up against the border (Serhii, 25.10.2026).
@@ -84,14 +81,14 @@ private struct HistoryBackground: View {
 /// The "Rule broken this day" line comes with the violations task (decision 3).
 struct HistoryLegend: View {
     /// One column for both icons (the bed is wider than the wheel), so the texts line up.
-    @ScaledMetric(relativeTo: .caption2) private var iconWidth: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var iconWidth: CGFloat = 14
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Tap a date to see that day.")
                 .font(.callout.italic())
             ForEach(Entry.all, id: \.symbol) { entry in
-                HStack(spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     // About 10 pt at the default size, scaling with the text.
                     Image(systemName: entry.symbol)
                         .font(.caption2.weight(.semibold))
@@ -99,7 +96,11 @@ struct HistoryLegend: View {
                         .foregroundStyle(Color.tachoBlue)
                         .frame(width: iconWidth)
                         .accessibilityHidden(true)
-                    Text(entry.text).font(.caption2)
+                    // Caption (12 pt), not Figma's Caption 2 (11 pt): the accessibility audit flagged Caption 2
+                    // here as only partly scaling with Dynamic Type in about one run in three.
+                    Text(entry.text)
+                        .font(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -138,10 +139,14 @@ struct HistoryCalendar: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    /// Smaller day numbers than the system default (Serhii, 25.10.2026). The calendar is laid out wider and drawn
-    /// at this scale (`ScaledToWidth`), so it still follows Dynamic Type; a content-size trait override confused
-    /// the accessibility audit.
-    static let scale: CGFloat = 0.88
+    /// Smaller day numbers than the system default (Serhii, 25.10.2026): the calendar uses a text size two steps
+    /// below the reader's own, so it still follows Dynamic Type. (Scaling the view instead showed the wrong month
+    /// in UIKit, or left the full-size view over the legend with a SwiftUI scale effect.)
+    static func calendarTextSize(for size: DynamicTypeSize) -> UIContentSizeCategory {
+        let sizes = DynamicTypeSize.allCases
+        let index = sizes.firstIndex(of: size) ?? sizes.firstIndex(of: .large)!
+        return UIContentSizeCategory(sizes[max(sizes.startIndex, index - 2)])
+    }
 
     func makeUIView(context: Context) -> UICalendarView {
         let view = UICalendarView()
@@ -168,6 +173,12 @@ struct HistoryCalendar: UIViewRepresentable {
         let changed = Set(coordinator.parent.markers.keys).union(markers.keys)
             .filter { coordinator.parent.markers[$0] != markers[$0] }
         coordinator.parent = self
+        let textSize = Self.calendarTextSize(for: context.environment.dynamicTypeSize)
+        // Reading an override that was never set traps in UIKit, so the coordinator remembers the last one.
+        if coordinator.textSize != textSize {
+            coordinator.textSize = textSize
+            view.traitOverrides.preferredContentSizeCategory = textSize
+        }
         let range = Self.availableRange(today: today)
         if view.availableDateRange != range { view.availableDateRange = range }
         guard !changed.isEmpty else { return }
@@ -193,6 +204,7 @@ struct HistoryCalendar: UIViewRepresentable {
     final class Coordinator: NSObject, UICalendarViewDelegate, UICalendarSelectionSingleDateDelegate {
         var parent: HistoryCalendar
         weak var calendarView: UICalendarView?
+        var textSize: UIContentSizeCategory?
 
         init(_ parent: HistoryCalendar) { self.parent = parent }
 
@@ -221,24 +233,6 @@ struct HistoryCalendar: UIViewRepresentable {
             guard let dateComponents, let date = calendarView?.calendar.date(from: dateComponents) else { return false }
             return date <= parent.today
         }
-    }
-}
-
-/// Lays out its one child `1 / scale` times wider than offered and reports the child's size times `scale`;
-/// the child applies `scaleEffect(scale)`, so it is drawn exactly in the offered width.
-struct ScaledToWidth: Layout {
-    var scale: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard let child = subviews.first else { return .zero }
-        let width = proposal.width ?? 370
-        let size = child.sizeThatFits(ProposedViewSize(width: width / scale, height: nil))
-        return CGSize(width: width, height: size.height * scale)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        subviews.first?.place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center,
-                              proposal: ProposedViewSize(width: bounds.width / scale, height: bounds.height / scale))
     }
 }
 

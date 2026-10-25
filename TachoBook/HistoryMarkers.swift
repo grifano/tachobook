@@ -45,8 +45,8 @@ extension DayLogModel {
         return dayRecord(on: day, calendar: calendar)
     }
 
-    /// Markers for `day`. The bed sits where the Home row's count gains a reduction (the day its rest ended,
-    /// or the shift day once its duty passes 13 h), so it matches the history row of PR #13.
+    /// Markers for `day`. The bed sits on the day of the shift whose following rest is reduced (Serhii,
+    /// 25.10.2026): the shift day, not the day the rest ended. A shift past 13 h shows it while its rest runs.
     public func historyMarkers(on day: Date, now: Date, calendar: Calendar = .current) -> HistoryDayMarkers {
         let start = calendar.startOfDay(for: day)
         guard start <= calendar.startOfDay(for: now) else { return [] }
@@ -54,12 +54,49 @@ extension DayLogModel {
         if HistoryMarkers.isExtendedDriving(minutes: historyRecord(on: start, calendar: calendar)?.drivingMinutes) {
             markers.insert(.extendedDriving)
         }
-        if let today = reductionIDs(endOf: start, now: now, calendar: calendar), !today.isEmpty {
-            let previous = calendar.date(byAdding: .day, value: -1, to: start)
-                .flatMap { reductionIDs(endOf: $0, now: now, calendar: calendar) } ?? []
-            if !today.isSubset(of: previous) { markers.insert(.reducedRest) }
+        let shiftsOfDay = Set((state.history + [state.current])
+            .filter { $0.start != nil && DayHistory.recordDay($0, calendar: calendar) == start }.map(\.id))
+        if let reductions = historyReductionIDs(onDay: start, now: now, calendar: calendar),
+           !reductions.isDisjoint(with: shiftsOfDay) {
+            markers.insert(.reducedRest)
         }
         return markers
+    }
+
+    /// Reduced rests used since the last weekly rest as the History sheet shows them for `day` (Serhii,
+    /// 25.10.2026): every reduction up to that day, including the rest after that day's own shift once it is
+    /// reduced. nil while the count is unknown.
+    public func historyReducedRests(onDay day: Date, now: Date, calendar: Calendar = .current) -> Int? {
+        historyReductionIDs(onDay: day, now: now, calendar: calendar)?.count
+    }
+
+    /// The reductions behind `historyReducedRests`, each named by the shift whose following rest it is.
+    /// The records of `day` and earlier are counted together with the rest after the last of them: it ends at
+    /// the next shift's start (or runs up to `now`).
+    func historyReductionIDs(onDay day: Date, now: Date, calendar: Calendar = .current) -> Set<UUID>? {
+        let start = calendar.startOfDay(for: day)
+        let all = ReducedRestCounter.timeline(state.history + [state.current])
+        var records = all.filter { DayHistory.recordDay($0, calendar: calendar) <= start }
+        guard let last = records.last else { return nil }
+        var instant = now
+        if let index = all.firstIndex(where: { $0.id == last.id }), index + 1 < all.count,
+           let anchor = last.start, let restStart = last.end, let restEnd = all[index + 1].start {
+            let rest = ReducedRestCounter.classify(anchor: anchor, pauses: ReducedRestCounter.pauses(of: last),
+                                                   restStart: restStart, restEnd: restEnd)
+            // Judged when the rest ended: a weekly rest is then no pending reduction of the shift before it.
+            instant = restEnd
+            // Only the next shift's start closes a daily rest; its own close and rests belong to its own day.
+            // A weekly rest starts the next week, so it is left out and the count stays as it was.
+            if rest != .weekly {
+                var opening = all[index + 1]
+                opening.end = nil
+                opening.isClosed = false
+                opening.rests = []
+                records.append(opening)
+            }
+        }
+        guard let latest = records.last else { return nil }
+        return ReducedRestCounter.shownReductionIDs(periods: records, latest: latest, now: instant)
     }
 
     /// Markers for every day from the first record up to today; days without markers are left out.

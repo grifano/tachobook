@@ -56,7 +56,7 @@ struct DaySummarySheet: View {
     }
 
     @ViewBuilder private func gauges(_ summary: DaySummary) -> some View {
-        GaugeProgressView(limit: "\(HomeTimeline.dutyMarkerHours.second)h", value: summary.workValue,
+        GaugeProgressView(limit: summary.workLimit, value: summary.workValue,
                           progress: summary.workProgress, tint: .tachoOrange,
                           countIcon: .hammer, reducedRestsUsed: summary.reducedRestsUsed)
             .accessibilityIdentifier("daySummaryWork")
@@ -80,6 +80,7 @@ struct DaySummary {
 
     var subtitle: String
     var isEmpty: Bool
+    var workLimit: String
     var workValue: String
     var workProgress: Double
     var restLimit: String
@@ -90,7 +91,6 @@ struct DaySummary {
 
     init(model: DayLogModel, day: Date, now: Date, calendar: Calendar = .current) {
         let day = calendar.startOfDay(for: day)
-        let isToday = calendar.isDate(day, inSameDayAs: now)
         let record = model.historyRecord(on: day, calendar: calendar)
         // "20 Apr 2026" as in Figma: Home's date label with the year.
         subtitle = "\(HomeTimeline.dateLabel(day, calendar: calendar)) \(calendar.component(.year, from: day))"
@@ -101,19 +101,19 @@ struct DaySummary {
         let elapsed = record?.start.flatMap { start in
             (record?.end ?? (isOpen ? now : nil)).map { HomeTimeline.elapsedSeconds(from: start, to: $0) }
         }
+        // A running shift keeps the 15 h scale, as on Home today; a finished one shows 13 h or 15 h.
+        workLimit = "\(isOpen ? HomeTimeline.dutyMarkerHours.second : HomeTimeline.pastDutyLimitHours(seconds: elapsed))h"
         workValue = elapsed.map { HomeTimeline.clockDuration(seconds: $0) } ?? "?"
         workProgress = Double(elapsed ?? 0) / (Double(HomeTimeline.dutyMarkerHours.second) * 3600)
 
         // Rest taken after the shift (the past-day Rest Taken card).
         let rest = model.restTaken(after: record, now: now)
-        restLimit = rest != nil && rest?.end == nil ? "So far" : "Taken"
+        restLimit = HomeTimeline.restTakenLabel(rest)
         restValue = rest.map { HomeTimeline.clockDuration(seconds: $0.seconds) } ?? "?"
         restProgress = HomeTimeline.restTakenFill(seconds: rest?.seconds)
 
-        // The Home row: today's live count, or the count as it stood at the end of a past day.
-        reducedRestsUsed = isToday
-            ? model.homeReducedRests(now: now)
-            : model.reducedRests(endOf: day, now: now, calendar: calendar)
+        // Reductions up to this day, the rest after this day's own shift included (Serhii, 25.10.2026).
+        reducedRestsUsed = model.historyReducedRests(onDay: day, now: now, calendar: calendar)
 
         times = [
             Time(symbol: "play.circle", label: "Day started",

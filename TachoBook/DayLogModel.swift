@@ -112,8 +112,9 @@ public final class DayLogModel {
             } else if args.contains("-seedCountHistory"), model.isEmpty {
                 model.seedCountHistoryIfEmpty(now: Date())
             } else if args.contains("-seedHistoryWeek"), model.isEmpty {
-                // The count history with extended driving 3 days ago (wheel) and 2 days ago (wheel and bed).
-                model.seedCountHistoryIfEmpty(now: Date(), drivingMinutes: [300, 570, 600, 300])
+                // The count history with reduced rests after the shifts 3 and 2 days ago (beds) and extended
+                // driving 2 days ago and yesterday (wheels).
+                model.seedCountHistoryIfEmpty(now: Date(), drivingMinutes: [300, 300, 600, 570])
             } else if args.contains("-seedDailyRestNearEleven"), model.isEmpty {
                 // A daily rest 20 s short of 11 h, to watch it switch to the weekly card.
                 let now = Date()

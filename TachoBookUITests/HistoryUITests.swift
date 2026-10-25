@@ -1,8 +1,8 @@
 import XCTest
 
 /// MVP-07 History tab: month calendar with markers, legend, and the read-only Day summary sheet.
-/// Seed `-seedHistoryWeek`: shifts 5, 3, 2 and 1 days ago; extended driving 3 days ago (wheel) and 2 days ago
-/// (wheel and bed: its 14 h shift makes the reduction certain), nothing 4 days ago.
+/// Seed `-seedHistoryWeek`: shifts 5, 3, 2 and 1 days ago; reduced rests after the shifts 3 and 2 days ago (beds on
+/// those shift days), extended driving 2 days ago and yesterday (wheels), nothing 4 days ago.
 final class HistoryUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -18,10 +18,11 @@ final class HistoryUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Rule broken this day"].exists, "no violation line yet")
 
         // Each decorated date names its markers for VoiceOver.
-        let wheelDay = dayCell(app, daysBack: 3)
-        XCTAssertTrue(wheelDay.waitForExistence(timeout: 5))
-        XCTAssertEqual(spoken(wheelDay), "extended driving")
+        let bedDay = dayCell(app, daysBack: 3)
+        XCTAssertTrue(bedDay.waitForExistence(timeout: 5))
+        XCTAssertEqual(spoken(bedDay), "reduced rest")
         XCTAssertEqual(spoken(dayCell(app, daysBack: 2)), "reduced rest, extended driving")
+        XCTAssertEqual(spoken(dayCell(app, daysBack: 1)), "extended driving")
         XCTAssertEqual(spoken(dayCell(app, daysBack: 4)), "")
         XCTAssertEqual(spoken(dayCell(app, daysBack: 5)), "", "a normal day has no markers")
         attach("History calendar")
@@ -50,6 +51,8 @@ final class HistoryUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["daySummaryStarted"].label.contains("06:00"))
         XCTAssertTrue(app.descendants(matching: .any)["daySummaryDriving"].label.contains("10h00m"))
         XCTAssertTrue(app.descendants(matching: .any)["daySummaryClosed"].label.contains("20:00"))
+        // Its own reduced rest counts on this day, after the one of the day before.
+        XCTAssertTrue(element(app, containing: "2 of 3 reduced rests used").exists)
         XCTAssertFalse(element(app, containing: "violation").exists, "no violation text (the tab name aside)")
         attach("Day summary with data")
         // iOS 26 draws the medium-detent sheet slightly scaled down, which the audit reads as too-small hit areas
@@ -101,6 +104,8 @@ final class HistoryUITests: XCTestCase {
         tab.tap()
         XCTAssertTrue(app.otherElements["historyLegend"].waitForExistence(timeout: 5)
                       || app.staticTexts["Tap a date to see that day."].waitForExistence(timeout: 5))
+        // Let the tab cross-fade finish: an audit during it measured the card over the dark photo.
+        Thread.sleep(forTimeInterval: 1)
         return app
     }
 
