@@ -188,14 +188,14 @@ public struct DashboardView: View {
         return workWidget(start: start, elapsed: model.shiftElapsedSeconds(at: now) ?? 0,
                           instant: model.currentRestStart ?? now, subtitle: subtitle,
                           isRestEnabled: model.isResting, labelsRelativeTo: now,
-                          reducedRestsUsed: model.workCardReducedRests(now: now))
+                          reducedRestsUsed: model.homeReducedRests(now: now))
     }
 
     /// Work card for any shift. `elapsed` nil shows the "--:--" placeholder instead of zeros.
-    /// `reducedRestsUsed` shows the bed row once the shift's reduction is certain (past 13 h).
+    /// `reducedRestsUsed` is the blue (used) hammers of the always-visible row; nil (unknown) shows all gray.
     private func workWidget(start: Date?, elapsed: Int?, instant: Date, subtitle: String,
                             isRestEnabled: Bool, labelsRelativeTo reference: Date,
-                            placeholder: String = "--:--", reducedRestsUsed: Int? = nil) -> some View {
+                            placeholder: String = "--:--", reducedRestsUsed: Int?) -> some View {
         let markers = start.map { HomeTimeline.dutyMarkers(shiftStart: $0) }
         let warning = start.flatMap { start in
             elapsed != nil && HomeTimeline.isDutyWarning(shiftStart: start, at: instant)
@@ -210,7 +210,7 @@ public struct DashboardView: View {
                 limit: "\(HomeTimeline.dutyMarkerHours.second)h",
                 value: elapsed.map { HomeTimeline.clockDuration(seconds: $0) } ?? placeholder,
                 progress: Double(elapsed ?? 0) / (Double(HomeTimeline.dutyMarkerHours.second) * 3600),
-                tint: .tachoOrange, warning: warning, reducedRestsUsed: reducedRestsUsed),
+                tint: .tachoOrange, warning: warning, countIcon: .hammer, reducedRestsUsed: reducedRestsUsed),
             limits: [
                 HomeLimit(label: "\(HomeTimeline.dutyMarkerHours.first)h limit end",
                           value: markers.map { HomeTimeline.clockLabel($0.first, relativeTo: reference) } ?? placeholder),
@@ -235,7 +235,7 @@ public struct DashboardView: View {
                     limit: "\(kind.requiredHours)h",
                     value: HomeTimeline.clockDuration(seconds: elapsed),
                     progress: Double(elapsed) / (Double(kind.requiredHours) * 3600),
-                    tint: .tachoBlue, reducedRestsUsed: model.restCardReducedRests(now: now)),
+                    tint: .tachoBlue, countIcon: .bed, reducedRestsUsed: model.homeReducedRests(now: now)),
                 limits: [
                     HomeLimit(label: "After \(kind.milestoneHours.first)h rest",
                               value: HomeTimeline.clockLabel(milestones.first, relativeTo: now)),
@@ -384,26 +384,28 @@ public struct DashboardView: View {
     private func pastDayContent(now: Date) -> some View {
         let day = DayHistory.day(daysBack: daysBack, from: now)
         let record = model.dayRecord(on: day)
+        // The count as it stood at the end of that day (owner decision 5).
+        let used = model.reducedRests(endOf: day, now: now)
         if tab.wrappedValue == .rest {
-            restTakenWidget(day: day, rest: model.restTaken(after: record, now: now))
+            restTakenWidget(day: day, rest: model.restTaken(after: record, now: now), reducedRestsUsed: used)
         } else {
-            pastWorkWidget(day: day, record: record, now: now)
+            pastWorkWidget(day: day, record: record, now: now, reducedRestsUsed: used)
         }
         pastSummaryCard(day: day, record: record, now: now)
     }
 
-    private func pastWorkWidget(day: Date, record: DutyPeriod?, now: Date) -> some View {
+    private func pastWorkWidget(day: Date, record: DutyPeriod?, now: Date, reducedRestsUsed: Int?) -> some View {
         let start = record?.start
         let end = record?.end
         let elapsed = start.flatMap { start in end.map { HomeTimeline.elapsedSeconds(from: start, to: $0) } }
         let subtitle = start.map { "\(HomeTimeline.dateLabel($0)) · Started \(HomeTimeline.clockLabel($0, relativeTo: $0))" }
             ?? HomeTimeline.dateLabel(day)
         return workWidget(start: start, elapsed: elapsed, instant: end ?? now, subtitle: subtitle,
-                          isRestEnabled: true, labelsRelativeTo: day, placeholder: "?")
+                          isRestEnabled: true, labelsRelativeTo: day, placeholder: "?", reducedRestsUsed: reducedRestsUsed)
     }
 
     /// The Rest card layout for a past day: time taken after the shift, without 9/11/24/45 h markers.
-    private func restTakenWidget(day: Date, rest: RestTaken?) -> some View {
+    private func restTakenWidget(day: Date, rest: RestTaken?, reducedRestsUsed: Int?) -> some View {
         let placeholder = "?"
         return HomeMainWidget(
             icon: "HomeRestIcon", iconSize: CGSize(width: 40, height: 27),
@@ -414,7 +416,8 @@ public struct DashboardView: View {
             gauge: GaugeProgressView(
                 limit: rest?.end == nil && rest != nil ? "So far" : "Taken",
                 value: rest.map { HomeTimeline.clockDuration(seconds: $0.seconds) } ?? placeholder,
-                progress: HomeTimeline.restTakenFill(seconds: rest?.seconds), tint: .tachoBlue),
+                progress: HomeTimeline.restTakenFill(seconds: rest?.seconds), tint: .tachoBlue,
+                countIcon: .bed, reducedRestsUsed: reducedRestsUsed),
             limits: [
                 HomeLimit(label: "Rest started",
                           value: rest.map { HomeTimeline.clockLabel($0.start, relativeTo: day) } ?? placeholder),

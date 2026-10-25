@@ -12,26 +12,27 @@ public struct GaugeProgressView: View {
     public var progress: Double // 0.0 to 1.0
     public var tint: Color
     public var warning: String?
-    /// Figma "Rest Count" under the arc; nil hides the row (count unknown, or not a rest gauge).
+    /// Beds on the Rest view, hammers on the Work view (owner decision 3, 23.10.2026).
+    public var countIcon: ReducedRestRow.Icon
+    /// Used (blue) icons in the always-visible row under the arc; nil while the count is unknown (all gray).
     public var reducedRestsUsed: Int?
 
     public init(limit: String, value: String, progress: Double, tint: Color, warning: String? = nil,
-                reducedRestsUsed: Int? = nil) {
+                countIcon: ReducedRestRow.Icon, reducedRestsUsed: Int?) {
         self.limit = limit
         self.value = value
         self.progress = progress
         self.tint = tint
         self.warning = warning
+        self.countIcon = countIcon
         self.reducedRestsUsed = reducedRestsUsed
     }
 
     public var body: some View {
-        // The bed row is its own accessibility element, outside the combined gauge label.
+        // The row is its own accessibility element, outside the combined gauge label.
         ZStack(alignment: .bottom) {
             gauge
-            if let reducedRestsUsed {
-                ReducedRestRow(used: reducedRestsUsed)
-            }
+            ReducedRestRow(icon: countIcon, used: reducedRestsUsed)
         }
         .frame(width: 169, height: 161)
     }
@@ -85,31 +86,60 @@ public struct GaugeProgressView: View {
     }
 }
 
-/// Figma "Rest Count": three 18 × 20 beds, 8 pt apart, on the gauge's bottom edge.
-/// Red beds (left) are reductions used, blue beds are still available. Not interactive.
-struct ReducedRestRow: View {
-    var used: Int
+/// Figma "Rest Count", always shown on the Home main widget: three icons, 8 pt apart, on the gauge's
+/// bottom edge — 18 × 20 beds or 18 × 18 hammers (Figma 704:2659). Used icons (left) take the gauge colour
+/// (blue beds, orange hammers), available ones are gray; an unknown count shows all gray. Not interactive.
+public struct ReducedRestRow: View {
+    public enum Icon: Sendable {
+        /// One reduced daily rest (9 h).
+        case bed
+        /// One extended duty period (up to 15 h): the same reduction seen from the Work view.
+        case hammer
 
-    var body: some View {
+        var asset: String { self == .bed ? "RestCountIcon" : "WorkCountIcon" }
+        /// A used icon takes its gauge's colour: blue beds on Rest, orange hammers on Work.
+        var usedColor: Color { self == .bed ? .tachoBlue : .tachoOrange }
+        var height: CGFloat { self == .bed ? 19.983 : 18 }
+    }
+
+    var icon: Icon
+    var used: Int?
+
+    public var body: some View {
         HStack(spacing: 8) {
             ForEach(0..<ReducedRestCounter.limit, id: \.self) { index in
-                Image("RestCountIcon")
+                Image(icon.asset)
                     .resizable()
                     .renderingMode(.template)
-                    .frame(width: 18, height: 19.983)
-                    .foregroundStyle(index < used ? Color.tachoRed : Color.tachoBlue)
+                    .frame(width: 18, height: icon.height)
+                    .foregroundStyle(index < Self.usedIcons(used: used) ? icon.usedColor : TachoTheme.controlFill)
             }
         }
+        // Hammers sit on the beds' baseline; the element keeps the bed row's 70 × 20 frame for VoiceOver.
+        .frame(height: Icon.bed.height, alignment: .bottom)
+        .contentShape(.accessibility, Rectangle())
         .offset(x: 0.5)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Self.label(used: used))
+        .accessibilityLabel(Self.label(icon: icon, used: used))
         .accessibilityIdentifier("reducedRestCount")
     }
 
+    /// Blue (used) icons, never more than three; none while the count is unknown.
+    static func usedIcons(used: Int?) -> Int {
+        min(used ?? 0, ReducedRestCounter.limit)
+    }
+
+    /// The bed row's label (PR #11 wording).
     static func label(used: Int) -> String {
-        used > ReducedRestCounter.limit
-            ? "\(used) reduced rests used, limit \(ReducedRestCounter.limit)"
-            : "\(used) of \(ReducedRestCounter.limit) reduced rests used"
+        label(icon: .bed, used: used)
+    }
+
+    static func label(icon: Icon, used: Int?) -> String {
+        guard let used else { return icon == .bed ? "Reduced rests used: unknown" : "Extended shifts used: unknown" }
+        let noun = icon == .bed ? "reduced rests" : "extended shifts"
+        return used > ReducedRestCounter.limit
+            ? "\(used) \(noun) used, limit \(ReducedRestCounter.limit)"
+            : "\(used) of \(ReducedRestCounter.limit) \(noun) used"
     }
 }
 
