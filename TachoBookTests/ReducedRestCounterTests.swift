@@ -291,11 +291,53 @@ struct ReducedRestCounterTests {
         #expect(unknown.restCardReducedRests(now: date(12, 21)) == nil)
     }
 
-    @Test func aRunningRestOfTwentyFourHoursEndsThePendingBed() {
+    /// A rest past 24 h with 10 h inside the window is still the reduced daily rest of the shift before it
+    /// (decision 26.10.2026): the pending bed stays until the rest ends, then the new week starts from 0.
+    @Test func aRunningRestPastTwentyFourHoursKeepsThePendingBed() {
         let model = openShiftModel(used: 2)
         model.closeShift(at: date(12, 20))
         #expect(model.workCardReducedRests(now: date(13, 19, 59)) == 3)
-        #expect(model.workCardReducedRests(now: date(13, 20)) == nil)
+        #expect(model.workCardReducedRests(now: date(13, 20)) == 3)
+        #expect(model.homeReducedRests(now: date(14, 7)) == 3)
+        model.startShift(at: date(14, 8), now: date(14, 8))
+        #expect(model.reducedRestsUsed == 0)
+        #expect(model.homeReducedRests(now: date(14, 9)) == 0)
+    }
+
+    /// Less than 9 h inside the window (16 h shift): past 24 h the existing behaviour stays, no pending bed.
+    @Test func aRunningRestPastTwentyFourHoursWithLessThanNineHoursInTheWindowEndsThePendingBed() {
+        let model = openShiftModel(used: 2)
+        model.closeShift(at: date(12, 22))
+        #expect(model.workCardReducedRests(now: date(13, 21, 59)) == 3)
+        #expect(model.workCardReducedRests(now: date(13, 22)) == nil)
+    }
+
+    /// A confirmed split-first pause (3 h + 9 h) is no reduction, also when the rest becomes weekly.
+    @Test func aSplitRestPastTwentyFourHoursIsNoReduction() {
+        let model = openShiftModel(used: 1, pauses: [pause(date(12, 9), date(12, 12))])
+        model.closeShift(at: date(12, 20))
+        #expect(model.workCardReducedRests(now: date(14, 8)) == nil)
+    }
+
+    /// When the reduction would be the 4th, the shown count stays capped at 3, as for any pending reduction.
+    @Test func aFourthReductionBeforeAWeeklyRestStaysCappedAtThree() {
+        let model = openShiftModel(used: 3)
+        model.closeShift(at: date(12, 20))
+        #expect(model.workCardReducedRests(now: date(14, 7)) == 3)
+        #expect(model.homeReducedRests(now: date(14, 7)) == 3)
+        model.startShift(at: date(14, 8), now: date(14, 8))
+        #expect(model.reducedRestsUsed == 0)
+    }
+
+    /// Serhii's 24.10 rest: 05:39 → 19:17, then 35 h. Weekly as a whole, reduced inside its window (10 h 22).
+    @Test func aWeeklyRestIsStillJudgedInsideItsWindow() {
+        let anchor = date(24, 5, 39)
+        let restStart = date(24, 19, 17)
+        let restEnd = restStart.addingTimeInterval(35 * hour)
+        #expect(ReducedRestCounter.classify(anchor: anchor, pauses: [], restStart: restStart, restEnd: restEnd) == .weekly)
+        #expect(ReducedRestCounter.classifyInWindow(anchor: anchor, pauses: [], restStart: restStart, restEnd: restEnd) == .reduced)
+        #expect(ReducedRestCounter.classifyInWindow(anchor: anchor, pauses: [], restStart: date(24, 17, 39),
+                                                    restEnd: restEnd) == .regular)
     }
 
     // MARK: - Model: history edits (R-E01) and relaunch
