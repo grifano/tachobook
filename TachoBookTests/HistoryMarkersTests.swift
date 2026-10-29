@@ -69,14 +69,55 @@ struct HistoryMarkersTests {
         #expect(model.historyReducedRests(onDay: day(12), now: now, calendar: calendar) == 1)
     }
 
-    /// A 14 h shift followed by a weekly rest is no reduction, and the next week starts from zero.
-    @Test func aLongShiftBeforeAWeeklyRestIsNoReduction() {
+    /// A 14 h shift followed by a 36 h rest: only 10 h of it fall inside the 24 h window, so it is still a reduced
+    /// daily rest on the shift day (decision 26.10.2026), and the next week starts from zero after it.
+    @Test func aLongShiftBeforeAWeeklyRestIsStillAReduction() {
         let model = model([(date(10, 6), date(10, 14), nil), (date(12, 6), date(12, 20), nil),
+                           (date(14, 8), date(14, 16), nil)])
+        let now = date(15, 12)
+        #expect(model.historyMarkers(on: day(12), now: now, calendar: calendar) == [.reducedRest])
+        #expect(model.historyReducedRests(onDay: day(12), now: now, calendar: calendar) == 1)
+        #expect(model.historyReducedRests(onDay: day(14), now: now, calendar: calendar) == 0)
+    }
+
+    /// Serhii's data (report 26.10.2026): the 13 h 38 shift of 24.10 is followed by a rest that runs on into a
+    /// weekly rest until Monday 26.10. Only 10 h 22 of it fall inside the window, so 24.10 keeps its reduction
+    /// (3 used, bed on 24.10), and the count after that weekly rest starts again from 0.
+    @Test func aRestThatBecomesWeeklyKeepsTheReductionOfTwentyFourOctober() {
+        let model = ownerWeek
+        model.update { journal in
+            journal.current.rests[0].end = date(26, 6, 15)
+            journal.current.rests[0].kind = .weekly
+            journal.history.append(journal.current)
+            journal.current = DutyPeriod(date: date(26, 6, 15), start: date(26, 6, 15))
+        }
+        let now = date(26, 9)
+        let beds = (14...26).filter { model.historyMarkers(on: day($0), now: now, calendar: calendar).contains(.reducedRest) }
+        #expect(beds == [21, 23, 24])
+        #expect(model.historyReducedRests(onDay: day(24), now: now, calendar: calendar) == 3)
+        #expect(model.historyReducedRests(onDay: day(26), now: now, calendar: calendar) == 0)
+        // The Home row of 24.10 shows the same 3; today, after the weekly rest, 0.
+        #expect(model.reducedRests(endOf: day(24), now: now, calendar: calendar) == 3)
+        #expect(model.reducedRestsUsed == 0)
+        #expect(model.homeReducedRests(now: now) == 0)
+    }
+
+    /// The same rest with at least 11 h inside the window (a 12 h shift) is no reduction.
+    @Test func aRestThatBecomesWeeklyWithElevenHoursInTheWindowIsNoReduction() {
+        let model = model([(date(10, 6), date(10, 14), nil), (date(12, 6), date(12, 18), nil),
                            (date(14, 8), date(14, 16), nil)])
         let now = date(15, 12)
         #expect(model.historyMarkers(on: day(12), now: now, calendar: calendar) == [])
         #expect(model.historyReducedRests(onDay: day(12), now: now, calendar: calendar) == 0)
-        #expect(model.historyReducedRests(onDay: day(14), now: now, calendar: calendar) == 0)
+    }
+
+    /// Less than 9 h inside the window (a 16 h shift) keeps the existing behaviour: no reduction, no new marker.
+    @Test func aRestThatBecomesWeeklyWithLessThanNineHoursInTheWindowIsNoReduction() {
+        let model = model([(date(10, 6), date(10, 14), nil), (date(12, 6), date(12, 22), nil),
+                           (date(14, 8), date(14, 16), nil)])
+        let now = date(15, 12)
+        #expect(model.historyMarkers(on: day(12), now: now, calendar: calendar) == [])
+        #expect(model.historyReducedRests(onDay: day(12), now: now, calendar: calendar) == 0)
     }
 
     /// Without a completed weekly rest the count is unknown, so no bed is shown (as the gray row on Home).

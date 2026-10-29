@@ -74,6 +74,13 @@ public enum ReducedRestCounter {
     /// (the end of the previous rest, recorded as the period start).
     public static func classify(anchor: Date, pauses: [RestSegment], restStart: Date, restEnd: Date) -> CompletedRestClass {
         if restEnd.timeIntervalSince(restStart) >= weeklyRest { return .weekly }
+        return classifyInWindow(anchor: anchor, pauses: pauses, restStart: restStart, restEnd: restEnd)
+    }
+
+    /// How the part of a rest inside the 24 h window counts as the daily rest of the duty period before it,
+    /// whatever the rest's full length: a rest that runs on into a weekly rest is still judged in its window
+    /// (R-D02, R-W01; decision 26.10.2026). Never `.weekly`.
+    public static func classifyInWindow(anchor: Date, pauses: [RestSegment], restStart: Date, restEnd: Date) -> CompletedRestClass {
         let inWindow = secondsInWindow(start: restStart, end: restEnd, anchor: anchor)
         if inWindow >= regularRest { return .regular }
         guard inWindow >= reducedRest else { return .shortfall }
@@ -136,12 +143,15 @@ public enum ReducedRestCounter {
 
     /// Whether the rest after `period` is already certain to be reduced (or a deviation): its duty
     /// (start to close, or to `now` while open) is past 13 h and it has no confirmed split-first pause.
-    /// Not once a running rest has reached 24 h: it will then end as a weekly rest.
+    /// Once the rest has reached 24 h its window is over, so its part inside the window decides: 9 h up to
+    /// less than 11 h stays a reduction even though the rest becomes weekly (decision 26.10.2026).
     public static func isReductionPending(period: DutyPeriod, now: Date) -> Bool {
         guard let anchor = period.start else { return false }
         let close = period.end ?? now
         guard close.timeIntervalSince(anchor) > pendingAfter else { return false }
-        if period.end != nil, now.timeIntervalSince(close) >= weeklyRest { return false }
+        if period.end != nil, now.timeIntervalSince(close) >= weeklyRest {
+            return classifyInWindow(anchor: anchor, pauses: pauses(of: period), restStart: close, restEnd: now) == .reduced
+        }
         return !pauses(of: period).contains { isSplitFirst($0, anchor: anchor) }
     }
 

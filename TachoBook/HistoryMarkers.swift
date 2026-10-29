@@ -83,10 +83,11 @@ extension DayLogModel {
            let anchor = last.start, let restStart = last.end, let restEnd = all[index + 1].start {
             let rest = ReducedRestCounter.classify(anchor: anchor, pauses: ReducedRestCounter.pauses(of: last),
                                                    restStart: restStart, restEnd: restEnd)
-            // Judged when the rest ended: a weekly rest is then no pending reduction of the shift before it.
+            // Judged when the rest ended. A weekly rest with 9 h up to less than 11 h inside its window then still
+            // counts as the pending reduction of the shift before it (decision 26.10.2026).
             instant = restEnd
             // Only the next shift's start closes a daily rest; its own close and rests belong to its own day.
-            // A weekly rest starts the next week, so it is left out and the count stays as it was.
+            // A weekly rest starts the next week, so the next shift is left out: its count starts from 0.
             if rest != .weekly {
                 var opening = all[index + 1]
                 opening.end = nil
