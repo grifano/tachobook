@@ -13,7 +13,8 @@ public enum CompletedRestClass: Equatable, Sendable {
     case split
     /// 9 h up to less than 11 h inside the window, without a valid split.
     case reduced
-    /// Less than 9 h inside the window: below the baseline, not a reduction.
+    /// Less than 9 h inside the window: below the baseline. It still uses a reduction after a duty period past
+    /// 13 h without a confirmed split-first pause (owner decision 1, 30.10.2026).
     case shortfall
     /// 24 h or more: a weekly-rest boundary that starts a new count.
     case weekly
@@ -103,9 +104,12 @@ public enum ReducedRestCounter {
             let period = timed[index]
             guard let anchor = period.start, let restStart = period.end,
                   let restEnd = timed[index + 1].start else { return nil }
-            switch classify(anchor: anchor, pauses: pauses(of: period), restStart: restStart, restEnd: restEnd) {
+            let pauses = pauses(of: period)
+            switch classify(anchor: anchor, pauses: pauses, restStart: restStart, restEnd: restEnd) {
             case .weekly: return reduced
             case .reduced: reduced.append(period.id)
+            case .shortfall where isReductionCertain(anchor: anchor, pauses: pauses, close: restStart):
+                reduced.append(period.id)
             case .regular, .split, .shortfall: break
             }
         }
@@ -141,18 +145,19 @@ public enum ReducedRestCounter {
     /// Duty past which an 11 h rest no longer fits in the 24 h window (owner decision 12, 20.10.2026).
     static let pendingAfter: TimeInterval = 13 * 3600
 
-    /// Whether the rest after `period` is already certain to be reduced (or a deviation): its duty
-    /// (start to close, or to `now` while open) is past 13 h and it has no confirmed split-first pause.
-    /// Once the rest has reached 24 h its window is over, so its part inside the window decides: 9 h up to
-    /// less than 11 h stays a reduction even though the rest becomes weekly (decision 26.10.2026).
+    /// Duty past 13 h with no confirmed split-first pause: an 11 h rest no longer fits in the window, so the rest
+    /// after it uses one reduction whatever it leaves inside the window — reduced (9 h up to less than 11 h) or
+    /// short (less than 9 h), and also when it runs on into a weekly rest (decision 12, 20.10.2026; decision 1,
+    /// 30.10.2026). Once used, it stays used until the next completed weekly rest.
+    static func isReductionCertain(anchor: Date, pauses: [RestSegment], close: Date) -> Bool {
+        close.timeIntervalSince(anchor) > pendingAfter && !pauses.contains { isSplitFirst($0, anchor: anchor) }
+    }
+
+    /// Whether the rest after `period` is already certain to use a reduction: its duty (start to close, or to
+    /// `now` while open) is past 13 h and it has no confirmed split-first pause.
     public static func isReductionPending(period: DutyPeriod, now: Date) -> Bool {
         guard let anchor = period.start else { return false }
-        let close = period.end ?? now
-        guard close.timeIntervalSince(anchor) > pendingAfter else { return false }
-        if period.end != nil, now.timeIntervalSince(close) >= weeklyRest {
-            return classifyInWindow(anchor: anchor, pauses: pauses(of: period), restStart: close, restEnd: now) == .reduced
-        }
-        return !pauses(of: period).contains { isSplitFirst($0, anchor: anchor) }
+        return isReductionCertain(anchor: anchor, pauses: pauses(of: period), close: period.end ?? now)
     }
 
     /// The completed count plus the pending reduction of the current shift, never a fourth.

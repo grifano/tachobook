@@ -184,23 +184,30 @@ public struct DashboardView: View {
         let subtitle = start.map {
             "\(HomeTimeline.dayLabel($0, relativeTo: now)) · Started \(HomeTimeline.clockLabel($0, relativeTo: $0))"
         } ?? "Today"
+        // 13 h only at 3 of 3 without a confirmed split (R-D05; decisions 4–5, 30.10.2026).
+        let limits = model.dutyLimitAvailability
         // A frozen shift is judged at its close time, a running one at now.
         return workWidget(start: start, elapsed: model.shiftElapsedSeconds(at: now) ?? 0,
                           instant: model.currentRestStart ?? now, subtitle: subtitle,
                           isRestEnabled: model.isResting, labelsRelativeTo: now,
+                          limitHours: HomeTimeline.dutyGaugeHours(limits), limits: limits,
                           reducedRestsUsed: model.homeReducedRests(now: now))
     }
 
     /// Work card for any shift. `elapsed` nil shows the "--:--" placeholder instead of zeros.
-    /// `reducedRestsUsed` is the blue (used) hammers of the always-visible row; nil (unknown) shows all gray.
+    /// `limitHours` is the gauge label; `limits` (R-D05) sets the gauge scale, the warning and the
+    /// "…h limit end" rows. `reducedRestsUsed` is the blue (used) hammers of the always-visible row; nil
+    /// (unknown) shows all gray.
     private func workWidget(start: Date?, elapsed: Int?, instant: Date, subtitle: String,
                             isRestEnabled: Bool, labelsRelativeTo reference: Date,
                             placeholder: String = "--:--", limitHours: Int = HomeTimeline.dutyMarkerHours.second,
+                            limits: DutyLimitAvailability = .fifteenHours,
                             reducedRestsUsed: Int?) -> some View {
-        let markers = start.map { HomeTimeline.dutyMarkers(shiftStart: $0) }
+        let scaleHours = HomeTimeline.dutyGaugeHours(limits)
         let warning = start.flatMap { start in
-            elapsed != nil && HomeTimeline.isDutyWarning(shiftStart: start, at: instant)
-                ? HomeTimeline.remainingDuration(seconds: HomeTimeline.dutyRemainingSeconds(shiftStart: start, at: instant))
+            elapsed != nil && HomeTimeline.isDutyWarning(shiftStart: start, at: instant, limitHours: scaleHours)
+                ? HomeTimeline.remainingDuration(seconds: HomeTimeline.dutyRemainingSeconds(
+                    shiftStart: start, at: instant, limitHours: scaleHours))
                 : nil
         }
         return HomeMainWidget(
@@ -210,14 +217,13 @@ public struct DashboardView: View {
             gauge: GaugeProgressView(
                 limit: "\(limitHours)h",
                 value: elapsed.map { HomeTimeline.clockDuration(seconds: $0) } ?? placeholder,
-                progress: Double(elapsed ?? 0) / (Double(HomeTimeline.dutyMarkerHours.second) * 3600),
+                progress: Double(elapsed ?? 0) / (Double(scaleHours) * 3600),
                 tint: .tachoOrange, warning: warning, countIcon: .hammer, reducedRestsUsed: reducedRestsUsed),
-            limits: [
-                HomeLimit(label: "\(HomeTimeline.dutyMarkerHours.first)h limit end",
-                          value: markers.map { HomeTimeline.clockLabel($0.first, relativeTo: reference) } ?? placeholder),
-                HomeLimit(label: "\(HomeTimeline.dutyMarkerHours.second)h limit end",
-                          value: markers.map { HomeTimeline.clockLabel($0.second, relativeTo: reference) } ?? placeholder),
-            ])
+            limits: HomeTimeline.shownDutyMarkerHours(limits).map { hours in
+                HomeLimit(label: "\(hours)h limit end",
+                          value: start.map { HomeTimeline.clockLabel(HomeTimeline.adding(hours: hours, to: $0),
+                                                                     relativeTo: reference) } ?? placeholder)
+            })
     }
 
     @ViewBuilder
@@ -226,23 +232,25 @@ public struct DashboardView: View {
             // The card follows the displayed kind (a daily rest past 11 h shows as weekly).
             let kind = HomeTimeline.displayedRestKind(stored: model.restKind, restStart: restStart, now: now)
             let elapsed = HomeTimeline.elapsedSeconds(from: restStart, to: now)
-            let milestones = HomeTimeline.restMilestones(restStart: restStart, kind: kind)
+            // A daily rest needs 11 h at 3 of 3 without a confirmed split (R-D05; decisions 4–5, 30.10.2026).
+            let limits = model.dutyLimitAvailability
+            let required = kind == .daily ? HomeTimeline.dailyRestRequiredHours(limits) : kind.requiredHours
+            let milestoneHours = kind == .daily
+                ? HomeTimeline.shownDailyRestMilestoneHours(limits) : [kind.milestoneHours.first, kind.milestoneHours.second]
             HomeMainWidget(
                 icon: "HomeRestIcon", iconSize: CGSize(width: 40, height: 27),
                 title: kind == .weekly ? "Weekly Rest" : "Rest Time",
                 subtitle: "Closed \(HomeTimeline.dateLabel(restStart)) · \(HomeTimeline.clockLabel(restStart, relativeTo: restStart))",
                 accent: Color.tachoTextOnLight, tab: tab, isRestEnabled: true,
                 gauge: GaugeProgressView(
-                    limit: "\(kind.requiredHours)h",
+                    limit: "\(required)h",
                     value: HomeTimeline.clockDuration(seconds: elapsed),
-                    progress: Double(elapsed) / (Double(kind.requiredHours) * 3600),
+                    progress: Double(elapsed) / (Double(required) * 3600),
                     tint: .tachoBlue, countIcon: .bed, reducedRestsUsed: model.homeReducedRests(now: now)),
-                limits: [
-                    HomeLimit(label: "After \(kind.milestoneHours.first)h rest",
-                              value: HomeTimeline.clockLabel(milestones.first, relativeTo: now)),
-                    HomeLimit(label: "After \(kind.milestoneHours.second)h rest",
-                              value: HomeTimeline.clockLabel(milestones.second, relativeTo: now)),
-                ])
+                limits: milestoneHours.map { hours in
+                    HomeLimit(label: "After \(hours)h rest",
+                              value: HomeTimeline.clockLabel(HomeTimeline.adding(hours: hours, to: restStart), relativeTo: now))
+                })
         }
     }
 
@@ -275,11 +283,10 @@ public struct DashboardView: View {
     }
 
     private func nextRestCard(now: Date) -> some View {
-        let milestones = HomeTimeline.restMilestones(restStart: now, kind: .daily)
-        let items = [
-            ("After \(RestKind.daily.milestoneHours.first)h rest", milestones.first),
-            ("After \(RestKind.daily.milestoneHours.second)h rest", milestones.second),
-        ]
+        // Only 11 h at 3 of 3 without a confirmed split (R-D05; decisions 4–5, 30.10.2026).
+        let items = HomeTimeline.shownDailyRestMilestoneHours(model.dutyLimitAvailability).map { hours in
+            ("After \(hours)h rest", HomeTimeline.adding(hours: hours, to: now))
+        }
         return HomeSecondaryCard(symbol: "bed.double.fill", title: "Next rest after close this day",
                                  count: items.count) { index in
             HomeValueColumn(label: items[index].0,

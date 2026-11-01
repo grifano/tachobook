@@ -11,7 +11,8 @@ public struct HistoryDayMarkers: OptionSet, Hashable, Sendable {
     public let rawValue: Int
     public init(rawValue: Int) { self.rawValue = rawValue }
 
-    /// Bed: the Home row counts a new reduced daily rest (9 h ≤ rest < 11 h) on this day.
+    /// Bed: the Home row counts a new reduction on this day — a reduced daily rest (9 h ≤ rest < 11 h), or any
+    /// rest after a shift past 13 h without a confirmed split (decision 1, 30.10.2026).
     public static let reducedRest = HistoryDayMarkers(rawValue: 1 << 0)
     /// Steering wheel: the day's shift has extended driving (more than 9 h, up to 10 h).
     public static let extendedDriving = HistoryDayMarkers(rawValue: 1 << 1)
@@ -83,8 +84,8 @@ extension DayLogModel {
            let anchor = last.start, let restStart = last.end, let restEnd = all[index + 1].start {
             let rest = ReducedRestCounter.classify(anchor: anchor, pauses: ReducedRestCounter.pauses(of: last),
                                                    restStart: restStart, restEnd: restEnd)
-            // Judged when the rest ended. A weekly rest with 9 h up to less than 11 h inside its window then still
-            // counts as the pending reduction of the shift before it (decision 26.10.2026).
+            // Judged when the rest ended. A weekly rest after a shift past 13 h then still counts as the pending
+            // reduction of that shift (decisions of 26.10.2026 and 30.10.2026).
             instant = restEnd
             // Only the next shift's start closes a daily rest; its own close and rests belong to its own day.
             // A weekly rest starts the next week, so the next shift is left out: its count starts from 0.
