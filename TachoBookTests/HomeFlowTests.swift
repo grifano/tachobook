@@ -105,7 +105,7 @@ struct HomeFlowTests {
         #expect(model.canStartShift(at: date(20, 7, 25), now: date(20, 7, 25)))
     }
 
-    @Test(arguments: [(14 * 60 + 45, true, "00:15"), (14 * 60, true, "01:00"), (13 * 60 + 59, false, "01:01"), (16 * 60, true, "00:00")])
+    @Test(arguments: [(885, true, "00:15"), (840, true, "01:00"), (839, false, "01:01"), (960, true, "00:00")] as [(Int, Bool, String)])
     func dutyWarningAppearsInTheLastHourBeforeFifteenHours(elapsedMinutes: Int, warns: Bool, remaining: String) {
         let start = date(19, 5, 40)
         let now = start.addingTimeInterval(TimeInterval(elapsedMinutes * 60))

@@ -105,6 +105,43 @@ final class RestCountUITests: XCTestCase {
         }
     }
 
+    /// At 3 of 3 without a split only 13 h and 11 h apply (decisions 4–5, 30.10.2026); with 2 used both rows stay.
+    @MainActor
+    func testThreeOfThreeShowsOnlyThirteenAndElevenHours() {
+        let work = launch(["-resetHomeFlowTest", "-seedReducedRests", "3", "-seedOpenShiftMinutes", "60"])
+        XCTAssertTrue(work.staticTexts["Work Time"].waitForExistence(timeout: 5))
+        XCTAssertEqual(work.descendants(matching: .any)["reducedRestCount"].label, "3 of 3 extended shifts used")
+        XCTAssertTrue(work.descendants(matching: .any)["homeGauge"].label.contains("13h"))
+        XCTAssertTrue(has(work, "13h limit end"))
+        XCTAssertFalse(has(work, "15h limit end"))
+        XCTAssertTrue(has(work, "After 11h rest"))
+        XCTAssertFalse(has(work, "After 9h rest"))
+        attach("work 3 of 3, 13h and 11h")
+        work.terminate()
+
+        let rest = launch(["-resetHomeFlowTest", "-seedReducedRests", "3"])
+        XCTAssertTrue(rest.staticTexts["Rest Time"].waitForExistence(timeout: 5))
+        XCTAssertEqual(rest.descendants(matching: .any)["reducedRestCount"].label, "3 of 3 reduced rests used")
+        XCTAssertTrue(rest.descendants(matching: .any)["homeGauge"].label.contains("11h"))
+        XCTAssertTrue(has(rest, "After 11h rest"))
+        XCTAssertFalse(has(rest, "After 9h rest"))
+        attach("rest 3 of 3, 11h")
+        select("Work", showing: "Work Time", in: rest)
+        XCTAssertTrue(has(rest, "13h limit end"))
+        XCTAssertFalse(has(rest, "15h limit end"))
+        attach("work while resting 3 of 3, 13h")
+        rest.terminate()
+
+        let two = launch(["-resetHomeFlowTest", "-seedReducedRests", "2", "-seedOpenShiftMinutes", "60"])
+        XCTAssertTrue(two.staticTexts["Work Time"].waitForExistence(timeout: 5))
+        XCTAssertTrue(two.descendants(matching: .any)["homeGauge"].label.contains("15h"))
+        XCTAssertTrue(has(two, "13h limit end"))
+        XCTAssertTrue(has(two, "15h limit end"))
+        XCTAssertTrue(has(two, "After 9h rest"))
+        XCTAssertTrue(has(two, "After 11h rest"))
+        attach("work 2 of 3, 15h and 9h")
+    }
+
     @MainActor
     func testPastDaysShowTheCountAtTheEndOfThatDay() {
         // Two days ago: a 14 h shift after the first reduction — 2 at the end of the day; three days ago: 0.
@@ -132,6 +169,7 @@ final class RestCountUITests: XCTestCase {
     func testAccessibilityAuditWithBeds() throws {
         for (args, title) in [(["-seedReducedRests", "2", "-seedWeeklyCard"], "Weekly Rest"),
                               (["-seedReducedRests", "3"], "Rest Time"),
+                              (["-seedReducedRests", "3", "-seedOpenShiftMinutes", "60"], "Work Time"),
                               (["-seedReducedRests", "1", "-seedOpenShiftMinutes", "870"], "Work Time"),
                               (["-seedReducedRests", "1", "-seedOpenShiftMinutes", "60"], "Work Time"),
                               (["-seedReadyWeeklyRest"], "Weekly Rest"),
@@ -150,6 +188,12 @@ final class RestCountUITests: XCTestCase {
             XCTAssertTrue(issues.isEmpty, "\(title): \(issues.joined(separator: "; "))")
             app.terminate()
         }
+    }
+
+    /// A Home row whose label starts with `prefix` ("13h limit end, 19:00").
+    @MainActor
+    private func has(_ app: XCUIApplication, _ prefix: String) -> Bool {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch.exists
     }
 
     @MainActor

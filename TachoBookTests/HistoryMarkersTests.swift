@@ -111,13 +111,14 @@ struct HistoryMarkersTests {
         #expect(model.historyReducedRests(onDay: day(12), now: now, calendar: calendar) == 0)
     }
 
-    /// Less than 9 h inside the window (a 16 h shift) keeps the existing behaviour: no reduction, no new marker.
-    @Test func aRestThatBecomesWeeklyWithLessThanNineHoursInTheWindowIsNoReduction() {
+    /// Less than 9 h inside the window (a 16 h shift): still the reduction of the shift day (decision 1, 30.10.2026).
+    @Test func aRestThatBecomesWeeklyWithLessThanNineHoursInTheWindowIsStillAReduction() {
         let model = model([(date(10, 6), date(10, 14), nil), (date(12, 6), date(12, 22), nil),
                            (date(14, 8), date(14, 16), nil)])
         let now = date(15, 12)
-        #expect(model.historyMarkers(on: day(12), now: now, calendar: calendar) == [])
-        #expect(model.historyReducedRests(onDay: day(12), now: now, calendar: calendar) == 0)
+        #expect(model.historyMarkers(on: day(12), now: now, calendar: calendar) == [.reducedRest])
+        #expect(model.historyReducedRests(onDay: day(12), now: now, calendar: calendar) == 1)
+        #expect(model.historyReducedRests(onDay: day(14), now: now, calendar: calendar) == 0)
     }
 
     /// Without a completed weekly rest the count is unknown, so no bed is shown (as the gray row on Home).

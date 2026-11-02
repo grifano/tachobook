@@ -43,13 +43,40 @@ public enum HomeTimeline {
         (adding(hours: kind.milestoneHours.first, to: restStart), adding(hours: kind.milestoneHours.second, to: restStart))
     }
 
-    /// Seconds left until the 15 h marker at `instant` (now, or the close time of a frozen shift).
-    public static func dutyRemainingSeconds(shiftStart: Date, at instant: Date) -> Int {
-        elapsedSeconds(from: instant, to: dutyMarkers(shiftStart: shiftStart).second)
+    /// Seconds left until the applicable duty marker (15 h, or 13 h at 3 of 3) at `instant`
+    /// (now, or the close time of a frozen shift).
+    public static func dutyRemainingSeconds(shiftStart: Date, at instant: Date,
+                                            limitHours: Int = dutyMarkerHours.second) -> Int {
+        elapsedSeconds(from: instant, to: adding(hours: limitHours, to: shiftStart))
     }
 
-    public static func isDutyWarning(shiftStart: Date, at instant: Date) -> Bool {
-        TimeInterval(dutyRemainingSeconds(shiftStart: shiftStart, at: instant)) <= dutyWarningThreshold
+    public static func isDutyWarning(shiftStart: Date, at instant: Date, limitHours: Int = dutyMarkerHours.second) -> Bool {
+        TimeInterval(dutyRemainingSeconds(shiftStart: shiftStart, at: instant, limitHours: limitHours)) <= dutyWarningThreshold
+    }
+
+    // MARK: - 13 h / 11 h at 3 of 3 (R-D05; owner decisions 4–5, 30.10.2026)
+
+    /// The Work gauge label and scale: 13 h when only an 11 h rest is possible, otherwise 15 h
+    /// (an unknown count keeps 15 h, as before).
+    public static func dutyGaugeHours(_ limits: DutyLimitAvailability) -> Int {
+        limits == .thirteenHoursOnly ? dutyMarkerHours.first : dutyMarkerHours.second
+    }
+
+    /// The "…h limit end" rows on the Work card: only 13 h at 3 of 3 without a confirmed split.
+    public static func shownDutyMarkerHours(_ limits: DutyLimitAvailability) -> [Int] {
+        limits == .thirteenHoursOnly ? [dutyMarkerHours.first] : [dutyMarkerHours.first, dutyMarkerHours.second]
+    }
+
+    /// The daily Rest gauge label and scale: 11 h at 3 of 3 without a confirmed split, otherwise 9 h.
+    public static func dailyRestRequiredHours(_ limits: DutyLimitAvailability) -> Int {
+        let hours = RestKind.daily.milestoneHours
+        return limits == .thirteenHoursOnly ? hours.second : hours.first
+    }
+
+    /// The "After …h rest" rows of a daily rest (Rest card, next-rest card): only 11 h at 3 of 3 without a split.
+    public static func shownDailyRestMilestoneHours(_ limits: DutyLimitAvailability) -> [Int] {
+        let hours = RestKind.daily.milestoneHours
+        return limits == .thirteenHoursOnly ? [hours.second] : [hours.first, hours.second]
     }
 
     /// A daily rest that continues to 11 h is shown as a weekly rest (R-W01: a daily rest can

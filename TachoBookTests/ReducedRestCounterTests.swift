@@ -75,10 +75,11 @@ struct ReducedRestCounterTests {
         #expect(count(used: 0, anchor: anchor, restStart: date(12, 20), restEnd: date(13, 7)) == 1)
     }
 
-    @Test func v04ShortfallIsNotAReduction() {
+    /// A shortfall below 9 h. Its duty is 15:01 without a split, so it still uses a reduction (decision 1, 30.10.2026).
+    @Test func v04ShortfallAfterALongShiftStillUsesAReduction() {
         let anchor = date(12, 6)
         #expect(ReducedRestCounter.classify(anchor: anchor, pauses: [], restStart: date(12, 21, 1), restEnd: date(13, 8, 1)) == .shortfall)
-        #expect(count(used: 1, anchor: anchor, restStart: date(12, 21, 1), restEnd: date(13, 8, 1)) == 1)
+        #expect(count(used: 1, anchor: anchor, restStart: date(12, 21, 1), restEnd: date(13, 8, 1)) == 2)
     }
 
     @Test func v05ThreeReductionsWithoutSplitLeaveOnlyThirteenHours() {
@@ -304,12 +305,16 @@ struct ReducedRestCounterTests {
         #expect(model.homeReducedRests(now: date(14, 9)) == 0)
     }
 
-    /// Less than 9 h inside the window (16 h shift): past 24 h the existing behaviour stays, no pending bed.
-    @Test func aRunningRestPastTwentyFourHoursWithLessThanNineHoursInTheWindowEndsThePendingBed() {
+    /// Less than 9 h inside the window (16 h shift): past 24 h the reduction stays too (decision 1, 30.10.2026),
+    /// and the next week starts from 0.
+    @Test func aRunningRestPastTwentyFourHoursWithLessThanNineHoursInTheWindowKeepsThePendingBed() {
         let model = openShiftModel(used: 2)
         model.closeShift(at: date(12, 22))
         #expect(model.workCardReducedRests(now: date(13, 21, 59)) == 3)
-        #expect(model.workCardReducedRests(now: date(13, 22)) == nil)
+        #expect(model.workCardReducedRests(now: date(13, 22)) == 3)
+        #expect(model.homeReducedRests(now: date(14, 7)) == 3)
+        model.startShift(at: date(14, 8), now: date(14, 8))
+        #expect(model.reducedRestsUsed == 0)
     }
 
     /// A confirmed split-first pause (3 h + 9 h) is no reduction, also when the rest becomes weekly.
