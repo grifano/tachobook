@@ -104,6 +104,7 @@ public enum ViolationRules {
             }
 
             // The final rest after the last close. Pauses before a Resume are not rests of their own (V09).
+            // A shift past 15 h always leaves less than 9 h in its window: both rows are kept (Serhii, 07.11.2026).
             if let restStart = period.end, let inWindow = restInWindow(after: period, at: index, in: timed,
                                                                       isCurrent: isCurrent, now: now),
                inWindow < minimumRest {
