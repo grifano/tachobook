@@ -35,8 +35,19 @@ struct ViolationCopyTests {
 
         let rest = violation(.shortRest)
         #expect(ViolationCopy.title(rest) == "Daily rest under 9h")
-        #expect(ViolationCopy.sheetSubtitle(rest, calendar: calendar) == "Mon 19 Oct · rest 8:15 in 24 h")
+        #expect(ViolationCopy.sheetSubtitle(rest, calendar: calendar) == "Mon 19 Oct · rest 8:15")
         #expect(ViolationCopy.redLine(rest) == "Your daily rest was shorter than 9 hours.")
+
+        // After a shift past its limit with no reduction left, 11 h are due (decision 22).
+        var eleven = rest
+        eleven.limitHours = 11
+        #expect(ViolationCopy.title(eleven) == "Daily rest under 11h")
+        #expect(ViolationCopy.redLine(eleven) == "Your daily rest was shorter than 11 hours.")
+        // No copy about the 24 h window anywhere (decision 22).
+        for text in [ViolationCopy.title(rest), ViolationCopy.sheetSubtitle(rest, calendar: calendar),
+                     ViolationCopy.redLine(rest), ViolationCopy.title(eleven), ViolationCopy.redLine(eleven)] {
+            #expect(!text.contains("24"), "\(text)")
+        }
     }
 
     @Test func rowAndPrintoutTexts() {

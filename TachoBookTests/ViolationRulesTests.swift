@@ -121,18 +121,14 @@ struct ViolationRulesTests {
 
     // MARK: - Daily rest under 9 h in its window (R-D02, R-D07)
 
-    @Test func v04RestShortOfNineHoursByOneMinute() throws {
-        // A = 12.10 06:00; rest 21:01 → 13.10 08:01: only 8:59 before D = 13.10 06:00.
+    @Test func v04AfterAShiftPastItsLimitTheWholeRestCounts() throws {
+        // A = 12.10 06:00; rest 21:01 → 13.10 08:01: 8:59 before D = 13.10 06:00, 11:00 in full. The late close
+        // passes the 15 h limit by a minute: one deviation; the rest is judged in full (decision 22, not V04).
         let anchor = date(12, 6)
         let shift = period(anchor, date(12, 21, 1))
         let found = violations(history(used: 1, endingAt: anchor) + [shift, period(date(13, 8, 1))], now: date(13, 9))
-        let rest = try #require(found.first { $0.kind == .shortRest })
-        #expect(rest.restSeconds == 8 * 3600 + 59 * 60)
-        #expect(rest.began == date(12, 21, 1))
-        #expect(rest.limitHours == 9)
-        #expect(rest.key == ViolationKey(periodID: shift.id, kind: .shortRest))
-        // The late close also passes the 15 h limit by a minute: both rules are kept, each as recorded.
-        #expect(found.contains { $0.kind == .dutyLimit && $0.overtimeSeconds == 60 })
+        #expect(found.map(\.kind) == [.dutyLimit])
+        #expect(found.first?.overtimeSeconds == 60)
     }
 
     @Test func shortRestAfterANormalShift() throws {
@@ -142,6 +138,90 @@ struct ViolationRulesTests {
         let rest = try #require(found.first)
         #expect(rest.kind == .shortRest)
         #expect(rest.restSeconds == 8 * 3600)
+    }
+
+    // MARK: - Rest after a shift past its limit (decision 22, 07.11.2026)
+
+    /// Serhii's device case: 29.10.2026 05:13–21:30 (16:17), then the next start after `rest`.
+    private func limitPassedDay(used: Int, rest: TimeInterval) -> (periods: [DutyPeriod], shift: DutyPeriod, now: Date) {
+        let anchor = date(29, 5, 13)
+        let shift = period(anchor, date(29, 21, 30))
+        let next = date(29, 21, 30).addingTimeInterval(rest)
+        return (history(used: used, endingAt: anchor) + [shift, period(next)], shift, next.addingTimeInterval(1800))
+    }
+
+    @Test func decision22NineOhSevenAsTheThirdReducedRestIsOneDeviation() throws {
+        // Only 7:43 of the 9:07 rest fall before 30.10 05:13; it used to show 2 violations.
+        let day = limitPassedDay(used: 2, rest: 9 * hour + 7 * 60)
+        let found = violations(day.periods, now: day.now)
+        #expect(found.map(\.kind) == [.dutyLimit])
+        #expect(found.first?.limitHours == 15)
+        #expect(found.first?.overtimeSeconds == 1 * 3600 + 17 * 60)
+
+        // The rest counts as the third reduced rest.
+        let model = model(day.periods)
+        #expect(model.reducedRestsUsed == 3)
+        #expect(model.homeReducedRests(now: day.now) == 3)
+        #expect(model.historyReducedRests(onDay: date(29, 0), now: day.now, calendar: calendar) == 3)
+        // The Violations tab and the History Day summary show the same count.
+        #expect(model.violations(now: day.now, calendar: calendar).count == 1)
+        let summary = DaySummary(model: model, day: date(29, 0), now: day.now, calendar: calendar)
+        #expect(summary.violations.count == 1)
+        #expect(summary.subtitle.hasSuffix(" · 1 violation"))
+    }
+
+    @Test func decision22SevenHourRestIsASecondDeviation() throws {
+        let day = limitPassedDay(used: 2, rest: 7 * hour)
+        let found = violations(day.periods, now: day.now)
+        #expect(Set(found.map(\.kind)) == [.dutyLimit, .shortRest])
+        let rest = try #require(found.first { $0.kind == .shortRest })
+        #expect(rest.key == ViolationKey(periodID: day.shift.id, kind: .shortRest))
+        #expect(rest.limitHours == 9)
+        #expect(rest.restSeconds == 7 * 3600)
+        #expect(rest.began == date(29, 21, 30))
+
+        let model = model(day.periods)
+        #expect(model.violations(now: day.now, calendar: calendar).count == 2)
+        let summary = DaySummary(model: model, day: date(29, 0), now: day.now, calendar: calendar)
+        #expect(summary.violations.count == 2)
+        #expect(summary.subtitle.hasSuffix(" · 2 violations"))
+    }
+
+    @Test func decision22NineOhSevenWithNoReductionLeftIsASecondDeviation() throws {
+        // 3 of 3 used: the limit is 13 h and the rest after it must be 11 h (R-D04).
+        let day = limitPassedDay(used: 3, rest: 9 * hour + 7 * 60)
+        let found = violations(day.periods, now: day.now)
+        #expect(found.count == 2)
+        let duty = try #require(found.first { $0.kind == .dutyLimit })
+        #expect(duty.limitHours == 13)
+        let rest = try #require(found.first { $0.kind == .shortRest })
+        #expect(rest.limitHours == 11)
+        #expect(rest.restSeconds == 9 * 3600 + 7 * 60)
+
+        let model = model(day.periods)
+        let summary = DaySummary(model: model, day: date(29, 0), now: day.now, calendar: calendar)
+        #expect(summary.violations.count == model.violations(now: day.now, calendar: calendar).count)
+        // 11 h in full is enough.
+        let enough = limitPassedDay(used: 3, rest: 11 * hour)
+        #expect(violations(enough.periods, now: enough.now).map(\.kind) == [.dutyLimit])
+    }
+
+    @Test func decision22RestStillRunningIsNotJudged() {
+        // Resting since 21:30 past the window's end (30.10 05:13): the rest can still reach 9 h.
+        let anchor = date(29, 5, 13)
+        let periods = history(used: 2, endingAt: anchor) + [period(anchor, date(29, 21, 30))]
+        #expect(violations(periods, now: date(30, 6)).map(\.kind) == [.dutyLimit])
+        #expect(violations(periods, now: date(30, 12)).map(\.kind) == [.dutyLimit])
+    }
+
+    @Test func decision22ShiftWithinItsLimitKeepsTheWindowRule() throws {
+        // 06:00–21:00 is 15:00, within 15 h at 2 of 3: a rest of 8:59 is short by the R-D02 window rule.
+        let anchor = date(12, 6)
+        let found = violations(history(used: 2, endingAt: anchor) + [period(anchor, date(12, 21)), period(date(13, 5, 59))],
+                               now: date(13, 7))
+        #expect(found.map(\.kind) == [.shortRest])
+        #expect(found.first?.limitHours == 9)
+        #expect(found.first?.restSeconds == 8 * 3600 + 59 * 60)
     }
 
     @Test func nineHoursInTheWindowIsNotADeviation() {
@@ -161,26 +241,28 @@ struct ViolationRulesTests {
         let anchor = date(12, 6)
         let shift = period(anchor, date(12, 21, 5), pauses: [pause(date(12, 20, 45), date(12, 20, 50), confirmed: nil)])
         let current = history(used: 1, endingAt: anchor) + [shift]
-        // While the rest runs before D (13.10 06:00) its classification is provisional.
-        let duringRest = violations(current, now: date(13, 5))
-        #expect(duringRest.map(\.kind) == [.dutyLimit], "15:05 of duty passed the 15 h limit")
-        #expect(duringRest.first?.overtimeSeconds == 5 * 60)
-        // Once D has passed, 8:55 inside the window is final; the 9 h count from 21:05, not 20:45.
-        let rest = try #require(violations(current, now: date(13, 6, 1)).first { $0.kind == .shortRest })
+        // 15:05 of duty passed the 15 h limit; the running rest is not judged, even past D (decision 22).
+        for now in [date(13, 5), date(13, 6, 1)] {
+            let found = violations(current, now: now)
+            #expect(found.map(\.kind) == [.dutyLimit])
+            #expect(found.first?.overtimeSeconds == 5 * 60)
+        }
+        // Next start at D: 8:55 in full is short; the 9 h count from 21:05, not 20:45.
+        let rest = try #require(violations(current + [period(date(13, 6))], now: date(13, 7))
+            .first { $0.kind == .shortRest })
         #expect(rest.restSeconds == 8 * 3600 + 55 * 60)
         #expect(rest.began == date(12, 21, 5))
     }
 
-    @Test func restRunningIntoWeeklyIsJudgedInItsWindow() throws {
-        // Close at A + 16 h, then a 30 h rest: only 8 h of it are inside the window.
+    @Test func restRunningIntoWeeklyAfterALimitPassedShiftIsNoSecondDeviation() {
+        // Close at A + 16 h, then a 30 h rest: only 8 h of it are inside the window, 30 h in full (decision 22).
         let anchor = date(12, 6)
         let found = violations([period(anchor, date(12, 22)), period(date(14, 4))], now: date(14, 5))
-        let rest = try #require(found.first { $0.kind == .shortRest })
-        #expect(rest.restSeconds == 8 * 3600)
+        #expect(found.map(\.kind) == [.dutyLimit])
     }
 
     @Test func newestFirst() {
-        let found = violations([period(date(10, 6), date(10, 22)), period(date(11, 8), date(11, 18)), period(date(12, 1))],
+        let found = violations([period(date(10, 6), date(10, 22)), period(date(11, 6), date(11, 18)), period(date(12, 1))],
                                now: date(12, 2))
         #expect(found.map(\.began) == found.map(\.began).sorted(by: >))
         #expect(found.count == 3)

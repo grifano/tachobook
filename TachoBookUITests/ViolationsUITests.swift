@@ -28,7 +28,7 @@ final class ViolationsUITests: XCTestCase {
         rows.element(boundBy: 0).tap()
         XCTAssertTrue(app.staticTexts["sheetTitle"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["sheetTitle"].label, "Daily rest under 9h")
-        XCTAssertTrue(app.staticTexts["sheetSubtitle"].label.hasSuffix("· rest 8:00 in 24 h"), app.staticTexts["sheetSubtitle"].label)
+        XCTAssertTrue(app.staticTexts["sheetSubtitle"].label.hasSuffix("· rest 8:00"), app.staticTexts["sheetSubtitle"].label)
         XCTAssertEqual(app.staticTexts["violationRedLine"].label, "Your daily rest was shorter than 9 hours.")
         XCTAssertTrue(app.staticTexts["Print a tachograph log and write the reason on it by hand when you stop."].exists)
         XCTAssertTrue(app.descendants(matching: .any)["printoutNote"].label.contains("Art. 12 EC 561/2006"))

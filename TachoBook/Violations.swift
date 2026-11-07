@@ -10,7 +10,8 @@ import Foundation
 public enum ViolationKind: String, Codable, Sendable, CaseIterable {
     /// The duty period ran past its applicable 13 h or 15 h limit (R-D05). Covers a fourth reduced rest (V05).
     case dutyLimit
-    /// The daily rest after a duty period had less than 9 h inside its 24 h window (R-D02, R-D07, V04).
+    /// The daily rest after a duty period had less than 9 h inside its 24 h window (R-D02, R-D07, V04). After a duty
+    /// period past its limit, the full rest was under 9 h, or under 11 h with no reduction left (decision 22).
     case shortRest
 }
 
@@ -47,13 +48,16 @@ public struct Violation: Identifiable, Equatable, Sendable {
     /// When it began: the moment the limit passed, or the start of the short rest. A printout cannot be earlier
     /// (decision 19).
     public var began: Date
-    /// 13 or 15 for a duty limit; 9 for a short rest.
+    /// 13 or 15 for a duty limit; 9 for a short rest, or 11 after a duty period past its limit with no reduction
+    /// left (decision 22).
     public var limitHours: Int
     /// The duty period's start: the anchor of its 24 h window.
     public var dutyStart: Date
     /// Duty from start to close, or to now while the shift is still open.
     public var dutySeconds: Int
-    /// Duty limit: the rest time inside the window is not used (0). Short rest: the rest inside the 24 h window.
+    /// Duty limit: not used (0). Short rest: the rest inside the 24 h window, or the full rest after a duty period
+    /// past its limit (decision 22). Both are the whole rest: a rest under 9 h after a duty within its limit always
+    /// fits in the window.
     public var restSeconds: Int
     /// The shift is still open and the overtime keeps growing.
     public var isOngoing: Bool
@@ -90,11 +94,14 @@ public enum ViolationRules {
 
             // Duty past the limit: close time, or now while the current shift is open. An archived record without a
             // close is incomplete: unknown, not a deviation.
+            var passedLimit: DutyLimitAvailability?
             if let dutyEnd = period.end ?? (isCurrent ? now : nil) {
                 let used = ReducedRestCounter.usedCount(periods: Array(timed[...index]))
-                let limit = applicableLimitHours(ReducedRestCounter.availability(used: used, period: period))
+                let availability = ReducedRestCounter.availability(used: used, period: period)
+                let limit = applicableLimitHours(availability)
                 let limitEnd = HomeTimeline.adding(hours: limit, to: anchor)
                 if dutyEnd > limitEnd {
+                    passedLimit = availability
                     found.append(Violation(
                         key: ViolationKey(periodID: period.id, kind: .dutyLimit), day: day, began: limitEnd,
                         limitHours: limit, dutyStart: anchor,
@@ -104,15 +111,23 @@ public enum ViolationRules {
             }
 
             // The final rest after the last close. Pauses before a Resume are not rests of their own (V09).
-            // A shift past 15 h always leaves less than 9 h in its window: both rows are kept (Serhii, 07.11.2026).
-            if let restStart = period.end, let inWindow = restInWindow(after: period, at: index, in: timed,
-                                                                      isCurrent: isCurrent, now: now),
-               inWindow < minimumRest {
+            guard let restStart = period.end else { continue }
+            let rest: (seconds: TimeInterval, required: TimeInterval)?
+            if let passedLimit {
+                // Decision 22 (Serhii, 07.11.2026; departs from V04/R-D07 for this case): past its limit the duty
+                // period is one deviation for its window. The rest after it is judged in full, from close to the
+                // next start, not clipped by the window: 9 h with a reduction left, else 11 h (R-D04).
+                rest = fullRest(after: index, in: timed).map { ($0, requiredRest(after: passedLimit)) }
+            } else {
+                rest = restInWindow(after: period, at: index, in: timed, isCurrent: isCurrent, now: now)
+                    .map { ($0, minimumRest) }
+            }
+            if let rest, rest.seconds < rest.required {
                 found.append(Violation(
                     key: ViolationKey(periodID: period.id, kind: .shortRest), day: day, began: restStart,
-                    limitHours: Int(minimumRest / 3600), dutyStart: anchor,
+                    limitHours: Int(rest.required / 3600), dutyStart: anchor,
                     dutySeconds: HomeTimeline.elapsedSeconds(from: anchor, to: restStart),
-                    restSeconds: Int(inWindow), isOngoing: false))
+                    restSeconds: Int(rest.seconds), isOngoing: false))
             }
         }
         return found.sorted { ($0.began, $0.kind.rawValue) > ($1.began, $1.kind.rawValue) }
@@ -130,6 +145,20 @@ public enum ViolationRules {
         let windowEnd = anchor.addingTimeInterval(window)
         guard isCurrent, now >= windowEnd else { return nil }
         return ReducedRestCounter.secondsInWindow(start: restStart, end: now, anchor: anchor)
+    }
+
+    /// The whole rest after the duty period at `index`, from its close to the next start (decision 22). nil while
+    /// the rest still runs (it can still reach the required hours) or the next start is unknown (R-U01).
+    static func fullRest(after index: Int, in timed: [DutyPeriod]) -> TimeInterval? {
+        guard let restStart = timed[index].end, index + 1 < timed.count,
+              let restEnd = timed[index + 1].start else { return nil }
+        return max(0, restEnd.timeIntervalSince(restStart))
+    }
+
+    /// The rest due after a duty period past its limit (decision 22, R-D04): 9 h while a reduction or a confirmed
+    /// split is left, 11 h when none is. While that is unknown, 9 h: only a rest under 9 h is certain (R-U01).
+    static func requiredRest(after availability: DutyLimitAvailability) -> TimeInterval {
+        availability == .thirteenHoursOnly ? ReducedRestCounter.regularRest : minimumRest
     }
 }
 

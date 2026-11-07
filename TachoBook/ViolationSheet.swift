@@ -8,8 +8,10 @@ import SwiftUI
 /// Every text the violation screens show, from Figma Flow 3, Flow 4 and Flow 3 View History, and spec Appendix G.
 /// Dynamic parts come from the records; dates follow the device locale.
 public enum ViolationCopy {
+    /// "Daily rest under 11h" (11 h due with no reduction left, decision 22) follows Figma's 9 h pattern; awaiting
+    /// Serhii's approval in PR #19.
     public static func title(_ violation: Violation) -> String {
-        violation.kind == .dutyLimit ? "Shift limit passed" : "Daily rest under 9h"
+        violation.kind == .dutyLimit ? "Shift limit passed" : "Daily rest under \(violation.limitHours)h"
     }
 
     /// Flow 3 · 02/04 (over Home) names the limit; the Flow 4 sheet uses the row title.
@@ -24,7 +26,8 @@ public enum ViolationCopy {
             + HomeTimeline.clockLabel(violation.began, relativeTo: now, calendar: calendar)
     }
 
-    /// Flow 4: "Mon 19 Oct · over by 0:30 since 18:40" or "Sun 18 Oct · rest 8:15 in 24 h".
+    /// Flow 4: "Mon 19 Oct · over by 0:30 since 18:40" or "Sun 18 Oct · rest 8:15". Figma's "in 24 h" is left out:
+    /// no copy about the 24 h window (decision 22); the time shown is always the whole rest.
     public static func sheetSubtitle(_ violation: Violation, calendar: Calendar = .current) -> String {
         let day = weekdayDayMonth(violation.day, calendar: calendar)
         switch violation.kind {
@@ -32,14 +35,14 @@ public enum ViolationCopy {
             return "\(day) · over by \(duration(violation.overtimeSeconds)) since "
                 + HomeTimeline.clockLabel(violation.began, relativeTo: violation.day, calendar: calendar)
         case .shortRest:
-            return "\(day) · rest \(duration(violation.restSeconds)) in 24 h"
+            return "\(day) · rest \(duration(violation.restSeconds))"
         }
     }
 
     public static func redLine(_ violation: Violation) -> String {
         violation.kind == .dutyLimit
             ? "You\u{2019}ve passed your \(violation.limitHours)-hour shift limit."
-            : "Your daily rest was shorter than 9 hours."
+            : "Your daily rest was shorter than \(violation.limitHours) hours."
     }
 
     public static let reminder = "Print a tachograph log and write the reason on it by hand when you stop."
