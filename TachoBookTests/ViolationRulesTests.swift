@@ -206,6 +206,15 @@ struct ViolationRulesTests {
         #expect(violations(enough.periods, now: enough.now).map(\.kind) == [.dutyLimit])
     }
 
+    @Test func decision22LongRestAfterALimitPassedShiftStillUsesAReduction() {
+        // 2 used, 16:17 of duty, then 12 h: one deviation, and the counter shows 3 (Serhii, 07.11.2026).
+        let day = limitPassedDay(used: 2, rest: 12 * hour)
+        #expect(violations(day.periods, now: day.now).map(\.kind) == [.dutyLimit])
+        let model = model(day.periods)
+        #expect(model.reducedRestsUsed == 3)
+        #expect(model.homeReducedRests(now: day.now) == 3)
+    }
+
     @Test func decision22RestStillRunningIsNotJudged() {
         // Resting since 21:30 past the window's end (30.10 05:13): the rest can still reach 9 h.
         let anchor = date(29, 5, 13)

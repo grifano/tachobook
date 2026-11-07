@@ -116,7 +116,8 @@ public enum ViolationRules {
             if let passedLimit {
                 // Decision 22 (Serhii, 07.11.2026; departs from V04/R-D07 for this case): past its limit the duty
                 // period is one deviation for its window. The rest after it is judged in full, from close to the
-                // next start, not clipped by the window: 9 h with a reduction left, else 11 h (R-D04).
+                // next start, not clipped by the window: 9 h with a reduction left, else 11 h (R-D04). The reduced-rest
+                // counter is unchanged: the rest still uses one reduction, even at 11 h or more (Serhii, 07.11.2026).
                 rest = fullRest(after: index, in: timed).map { ($0, requiredRest(after: passedLimit)) }
             } else {
                 rest = restInWindow(after: period, at: index, in: timed, isCurrent: isCurrent, now: now)
