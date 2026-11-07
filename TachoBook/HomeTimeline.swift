@@ -129,6 +129,45 @@ public enum HomeTimeline {
         return remainingDuration(seconds: elapsedSeconds(from: now, to: available))
     }
 
+    // MARK: - Start of day at 3 of 3 (R-D05, section 8; owner decision 01.11.2026)
+
+    /// The Start of day button during a rest.
+    public enum StartOfDayAvailability: Equatable {
+        /// Before the earliest allowed start (9 h daily, 45 h weekly): dimmed and disabled, counting down to the full rest.
+        case waiting(countdown: String)
+        /// 9 h up to 11 h of a daily rest at 3 of 3 without a confirmed split: dimmed but tappable, counting down
+        /// to 11 h. A tap warns first that starting now breaks the rest rules; it never blocks.
+        case earlyStart(countdown: String, fullRestEnd: Date)
+        /// The required rest is complete, or there is no rest: orange, no warning.
+        case available
+
+        public var countdown: String? {
+            switch self {
+            case .waiting(let countdown), .earlyStart(let countdown, _): countdown
+            case .available: nil
+            }
+        }
+
+        public var isEnabled: Bool {
+            if case .waiting = self { false } else { true }
+        }
+    }
+
+    /// Start of day for a rest that began at `restStart`. A daily rest needs 11 h at 3 of 3 without a confirmed
+    /// split (the same rule as the Rest gauge), but from 9 h a start is allowed with a warning; every other case
+    /// becomes available at the rest's own milestone, as before.
+    public static func startOfDayAvailability(restStart: Date?, kind: RestKind, limits: DutyLimitAvailability,
+                                              now: Date) -> StartOfDayAvailability {
+        guard let restStart else { return .available }
+        let required = kind == .daily ? dailyRestRequiredHours(limits) : kind.requiredHours
+        let fullRestEnd = adding(hours: required, to: restStart)
+        guard now < fullRestEnd else { return .available }
+        let countdown = remainingDuration(seconds: elapsedSeconds(from: now, to: fullRestEnd))
+        return now < adding(hours: kind.requiredHours, to: restStart)
+            ? .waiting(countdown: countdown)
+            : .earlyStart(countdown: countdown, fullRestEnd: fullRestEnd)
+    }
+
     /// "08:34", with a weekday suffix ("08:34 Su") when the day differs from `now`.
     public static func clockLabel(_ date: Date, relativeTo now: Date, calendar: Calendar = .current) -> String {
         let formatter = DateFormatter()

@@ -220,4 +220,11 @@ extension DayLogModel {
     public var dutyLimitAvailability: DutyLimitAvailability {
         ReducedRestCounter.availability(used: reducedRestsUsed, period: state.current)
     }
+
+    /// The Start of day button: the 11 h countdown and the early-start warning at 3 of 3 (decision 01.11.2026).
+    /// The sheet's own check (`checkStartShift`) stays at 9 h, so an early start remains recordable.
+    public func startOfDayAvailability(now: Date) -> HomeTimeline.StartOfDayAvailability {
+        HomeTimeline.startOfDayAvailability(restStart: currentRestStart, kind: restKind,
+                                            limits: dutyLimitAvailability, now: now)
+    }
 }

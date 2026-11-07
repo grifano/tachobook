@@ -102,10 +102,12 @@ public final class DayLogModel {
                 // Weekly rest, `used` reduced rests, then the current rest: daily (1 min) or weekly card (12 h).
                 // `-seedOpenShiftMinutes M`: instead, a shift still open M minutes after its start.
                 // `-seedDutyMinutes M`: the closed shift before the current rest lasted M minutes (default 3 h).
-                let restElapsed: TimeInterval = args.contains("-seedWeeklyCard") ? 12 * 3600 : 60
+                // `-seedRestMinutes M`: the current daily rest started M minutes ago (3 of 3 at 9:30 is 570).
                 func minutes(_ flag: String) -> TimeInterval? {
                     args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? Int(args[$0 + 1]) : nil }.map { TimeInterval($0) * 60 }
                 }
+                let restElapsed: TimeInterval = minutes("-seedRestMinutes")
+                    ?? (args.contains("-seedWeeklyCard") ? 12 * 3600 : 60)
                 model.seedReducedRestsIfEmpty(used: used, restElapsed: restElapsed, now: Date(),
                                               openShiftElapsed: minutes("-seedOpenShiftMinutes"),
                                               closedShiftDuty: minutes("-seedDutyMinutes") ?? 3 * 3600)
