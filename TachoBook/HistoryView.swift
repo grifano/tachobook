@@ -259,13 +259,20 @@ final class HistoryMarkerView: UIView {
 
     required init?(coder: NSCoder) { nil }
 
+    /// UICalendarView puts a decoration in a slot that clips to its bounds, about 16 pt below the number; the
+    /// lifted row has to draw outside it, so the slot stops clipping once the view is in the calendar.
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+        superview?.clipsToBounds = false
+    }
+
     override var intrinsicContentSize: CGSize { imageView.image?.size ?? .zero }
 }
 
 /// The 10 pt icons under a date, side by side as in Figma's "Row" (wheel, then bed), drawn into one image.
 enum HistoryMarkerRow {
     /// How far the icons move up toward the day number (pt).
-    static let liftUnderNumber: CGFloat = 4
+    static let liftUnderNumber: CGFloat = 16
 
     static func image(_ markers: HistoryDayMarkers) -> UIImage? {
         let configuration = UIImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
