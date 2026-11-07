@@ -28,6 +28,8 @@ public struct DashboardView: View {
     @State private var tabOverride: HomeTab?
     @State private var showDrivingAlert = false
     @State private var drivingAlertPending = false
+    /// The time the full 11 h rest ends, shown in the early-start warning at 3 of 3; nil while the alert is hidden.
+    @State private var earlyStartRestEnd: String?
     /// 0 is today (the live Home); 1…`DayHistory.maxDaysBack` are earlier days. View state only:
     /// browsing never writes to the store.
     @State private var daysBack = DashboardView.initialDaysBack
@@ -135,6 +137,17 @@ public struct DashboardView: View {
         } message: {
             Text("Add your total driving time for this shift.")
         }
+        // Approved copy (decision 2, 02.11.2026); a start before 11 h is warned about, never blocked.
+        .alert("All 3 reduced rests used", isPresented: earlyStartAlert, presenting: earlyStartRestEnd) { _ in
+            Button("Keep resting", role: .cancel) {}
+            Button("Start anyway", role: .destructive) { present(.startShift) }
+        } message: { time in
+            Text("Starting now breaks the rest rules. Rest until \(time) for the full 11 hours.")
+        }
+    }
+
+    private var earlyStartAlert: Binding<Bool> {
+        Binding(get: { earlyStartRestEnd != nil }, set: { if !$0 { earlyStartRestEnd = nil } })
     }
 
     // MARK: - States
@@ -254,19 +267,24 @@ public struct DashboardView: View {
         }
     }
 
+    /// Orange once the required rest is complete. At 3 of 3 without a split it counts down to 11 h and, from 9 h,
+    /// stays dimmed but tappable: a tap warns before the usual Start of day sheet (decision 01.11.2026).
     private func startOfDayButton(now: Date) -> some View {
-        let countdown = model.currentRestStart.flatMap {
-            HomeTimeline.availabilityCountdown(restStart: $0, kind: model.restKind, now: now)
-        }
-        let isAvailable = countdown == nil && model.storageError == nil
-        return Button { present(.startShift) } label: {
+        let availability = model.startOfDayAvailability(now: now)
+        return Button {
+            if case .earlyStart(_, let fullRestEnd) = availability {
+                earlyStartRestEnd = HomeTimeline.clockLabel(fullRestEnd, relativeTo: now)
+            } else {
+                present(.startShift)
+            }
+        } label: {
             HomeCapsuleLabel(symbol: "play.circle", title: "Start of day",
-                             subtitle: countdown.map { "Available in \($0)" },
-                             style: isAvailable ? .primary : .dimmed,
+                             subtitle: availability.countdown.map { "Available in \($0)" },
+                             style: availability == .available && model.storageError == nil ? .primary : .dimmed,
                              titleFont: .headline, subtitleFont: .footnote)
         }
         .buttonStyle(HomeCapsuleButtonStyle())
-        .disabled(!isAvailable)
+        .disabled(!availability.isEnabled || model.storageError != nil)
         .accessibilityIdentifier("startOfDayButton")
     }
 
