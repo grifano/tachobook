@@ -16,7 +16,7 @@ struct ViolationsView: View {
         TimelineView(.everyMinute) { context in
             let now = context.date
             VStack(spacing: 0) {
-                DashboardHeaderView(date: now, today: now)
+                DashboardHeaderView(date: now, today: now, showsDateStrip: false)
                 ScrollView {
                     ViolationsCard(rows: rows(now: now)) { selected = $0 }
                         .padding(.horizontal, 16)
@@ -72,7 +72,8 @@ struct ViolationsCard: View {
             if rows.isEmpty {
                 VStack(spacing: 4) {
                     Text("No violations").font(.body)
-                    Text("Your records show no limit passed.").font(.caption)
+                    // Medium weight, as the row subtitles: Caption 1 regular fails the contrast audit on the glass card.
+                    Text("Your records show no limit passed.").font(.caption.weight(.medium))
                 }
                 .foregroundStyle(Color.tachoTextOnLight)
                 .multilineTextAlignment(.center)

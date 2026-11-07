@@ -11,16 +11,19 @@ public struct DashboardHeaderView: View {
     /// The day shown (today, or an earlier day after swiping back).
     public var date: Date
     public var today: Date
+    /// The week strip is for swiping back on Home; the other tabs show only the weekday and date.
+    public var showsDateStrip: Bool
     public var onToday: () -> Void
     /// Tap on a reachable date: the number of days back to show.
     public var onSelect: (Int) -> Void
     /// VoiceOver adjust: +1 goes toward today, −1 to the previous day.
     public var onAdjust: (Int) -> Void
 
-    public init(date: Date = Date(), today: Date? = nil, onToday: @escaping () -> Void = {},
+    public init(date: Date = Date(), today: Date? = nil, showsDateStrip: Bool = true, onToday: @escaping () -> Void = {},
                 onSelect: @escaping (Int) -> Void = { _ in }, onAdjust: @escaping (Int) -> Void = { _ in }) {
         self.date = date
         self.today = today ?? date
+        self.showsDateStrip = showsDateStrip
         self.onToday = onToday
         self.onSelect = onSelect
         self.onAdjust = onAdjust
@@ -75,6 +78,7 @@ public struct DashboardHeaderView: View {
             }
             .padding(.horizontal, 16)
 
+            if showsDateStrip {
             HStack(spacing: 8) {
                 ForEach(HomeTimeline.dateStrip(today: today), id: \.offset) { day in
                     WeekDayItem(day: day, isSelected: Calendar.current.isDate(day.date, inSameDayAs: date),
@@ -85,6 +89,7 @@ public struct DashboardHeaderView: View {
                 }
             }
             .padding(.horizontal, 8)
+            }
         }
         .padding(.bottom, 10)
     }

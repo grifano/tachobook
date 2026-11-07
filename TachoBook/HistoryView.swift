@@ -23,9 +23,8 @@ struct HistoryView: View {
         TimelineView(.everyMinute) { context in
             let now = context.date
             VStack(spacing: 0) {
-                // Header as on Home; a reachable date in the strip opens its summary like a calendar tap.
-                DashboardHeaderView(date: now, today: now,
-                                    onSelect: { summaryDay = SummaryDay(date: DayHistory.day(daysBack: $0, from: now)) })
+                // Header as on Home, without the week strip (that is for swiping back on Home only).
+                DashboardHeaderView(date: now, today: now, showsDateStrip: false)
                 ScrollView {
                     calendarCard(now: now)
                         .padding(.horizontal, 16)
@@ -225,7 +224,7 @@ struct HistoryCalendar: UIViewRepresentable {
             else { return nil }
             guard let image = HistoryMarkerRow.image(markers) else { return nil }
             return .customView {
-                let view = UIImageView(image: image)
+                let view = HistoryMarkerView(image: image)
                 view.isAccessibilityElement = true
                 view.accessibilityLabel = markers.spokenNames.joined(separator: ", ")
                 return view
@@ -246,8 +245,28 @@ struct HistoryCalendar: UIViewRepresentable {
     }
 }
 
+/// Holds the icon row and draws it `HistoryMarkerRow.liftUnderNumber` higher than the spot UICalendarView gives
+/// a decoration, which closes the gap to the day number. The view keeps the row's size so the cell layout is unchanged.
+final class HistoryMarkerView: UIView {
+    private let imageView: UIImageView
+
+    init(image: UIImage) {
+        imageView = UIImageView(image: image)
+        super.init(frame: CGRect(origin: .zero, size: image.size))
+        imageView.frame = CGRect(x: 0, y: -HistoryMarkerRow.liftUnderNumber, width: image.size.width, height: image.size.height)
+        addSubview(imageView)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var intrinsicContentSize: CGSize { imageView.image?.size ?? .zero }
+}
+
 /// The 10 pt icons under a date, side by side as in Figma's "Row" (wheel, then bed), drawn into one image.
 enum HistoryMarkerRow {
+    /// How far the icons move up toward the day number (pt).
+    static let liftUnderNumber: CGFloat = 4
+
     static func image(_ markers: HistoryDayMarkers) -> UIImage? {
         let configuration = UIImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
         var symbols: [(name: String, color: Color)] = []
