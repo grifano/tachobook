@@ -8,8 +8,8 @@ import SwiftUI
 /// Every text the violation screens show, from Figma Flow 3, Flow 4 and Flow 3 View History, and spec Appendix G.
 /// Dynamic parts come from the records; dates follow the device locale.
 public enum ViolationCopy {
-    /// "Daily rest under 11h" (11 h due with no reduction left, decision 22) follows Figma's 9 h pattern; awaiting
-    /// Serhii's approval in PR #19.
+    /// "Daily rest under 11h" (11 h due with no reduction left, decision 22) follows Figma's 9 h pattern (approved
+    /// by Serhii, 07.11.2026).
     public static func title(_ violation: Violation) -> String {
         violation.kind == .dutyLimit ? "Shift limit passed" : "Daily rest under \(violation.limitHours)h"
     }
