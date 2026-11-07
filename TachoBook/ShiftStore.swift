@@ -41,9 +41,27 @@ enum ShiftSchemaV1: VersionedSchema {
     }
 }
 
+/// V2 adds the printout of each violation (owner decisions 9 and 16). Shift records are unchanged.
+enum ShiftSchemaV2: VersionedSchema {
+    static var versionIdentifier: Schema.Version { .init(2, 0, 0) }
+    static var models: [any PersistentModel.Type] { [ShiftSchemaV1.Period.self, Printout.self] }
+
+    @Model
+    final class Printout {
+        /// `ViolationKey.storageID`: the shift record and the violation kind.
+        @Attribute(.unique) var violation: String
+        var printedAt: Date
+
+        init(violation: String, printedAt: Date) {
+            self.violation = violation
+            self.printedAt = printedAt
+        }
+    }
+}
+
 enum ShiftMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [ShiftSchemaV1.self] }
-    static var stages: [MigrationStage] { [] }
+    static var schemas: [any VersionedSchema.Type] { [ShiftSchemaV1.self, ShiftSchemaV2.self] }
+    static var stages: [MigrationStage] { [.lightweight(fromVersion: ShiftSchemaV1.self, toVersion: ShiftSchemaV2.self)] }
 }
 
 enum ShiftStoreError: LocalizedError {
@@ -61,7 +79,7 @@ final class ShiftStore {
 
     init(url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let schema = Schema(versionedSchema: ShiftSchemaV1.self)
+        let schema = Schema(versionedSchema: ShiftSchemaV2.self)
         let configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
         container = try ModelContainer(for: schema, migrationPlan: ShiftMigrationPlan.self, configurations: [configuration])
         context = ModelContext(container)
@@ -80,7 +98,12 @@ final class ShiftStore {
         }
         let current = records.filter(\.isCurrent)
         guard current.count == 1 else { throw ShiftStoreError.invalidJournal }
-        return try ShiftJournal(current: current[0].value(), history: records.filter { !$0.isCurrent }.map { try $0.value() })
+        var printouts: [ViolationKey: Date] = [:]
+        for printout in try context.fetch(FetchDescriptor<ShiftSchemaV2.Printout>()) {
+            if let key = ViolationKey(storageID: printout.violation) { printouts[key] = printout.printedAt }
+        }
+        return try ShiftJournal(current: current[0].value(), history: records.filter { !$0.isCurrent }.map { try $0.value() },
+                                printouts: printouts)
     }
 
     func save(_ journal: ShiftJournal) throws {
@@ -109,6 +132,20 @@ final class ShiftStore {
             }
             let ids = Set(periods.map(\.id))
             for record in records where !ids.contains(record.id) { context.delete(record) }
+            // A printout outlives an edit that hides its violation, so it is back if the violation returns (R-E01).
+            let printouts = Dictionary(uniqueKeysWithValues: journal.printouts.map { ($0.key.storageID, $0.value) })
+            let saved = try context.fetch(FetchDescriptor<ShiftSchemaV2.Printout>())
+            for printout in saved {
+                if let date = printouts[printout.violation] {
+                    printout.printedAt = date
+                } else {
+                    context.delete(printout)
+                }
+            }
+            let savedIDs = Set(saved.map(\.violation))
+            for (violation, date) in printouts where !savedIDs.contains(violation) {
+                context.insert(ShiftSchemaV2.Printout(violation: violation, printedAt: date))
+            }
             try context.save()
         } catch {
             context.rollback()

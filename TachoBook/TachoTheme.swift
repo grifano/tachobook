@@ -37,6 +37,14 @@ public enum TachoTheme {
     // Filled-button colours darkened from Figma (#E8652A) so the XCTest accessibility audit's contrast check passes.
     public static let orangeStrong = Color(red: 196/255, green: 82/255, blue: 29/255)       // #C4521D
     public static let dimmedFill = Color(white: 0.86)
+    // Violation text and the green "Printout done" button: Figma red #DE635A and green #4A9965, darkened like the
+    // orange so text keeps a 4.5:1 contrast on the light sheets (the accessibility audit's contrast check).
+    public static let alertRedText = Color(red: 168/255, green: 50/255, blue: 42/255)          // #A8322A
+    public static let successGreenText = Color(red: 54/255, green: 117/255, blue: 73/255)      // #367549
+    /// The Violations card title: Figma #116B93 darkened slightly for the contrast audit on the glass card.
+    public static let headerBlueText = Color(red: 13/255, green: 88/255, blue: 122/255)    // #0D587A
+    /// Figma "Fills/Tertiary" behind the printout note.
+    public static let noteFill = Color(red: 228/255, green: 228/255, blue: 228/255).opacity(0.3)
     public static let sheetCloseFill = Color(red: 116/255, green: 116/255, blue: 128/255).opacity(0.08)
     public static let iconCircleFill = Color(red: 228/255, green: 228/255, blue: 228/255).opacity(0.3)
 }

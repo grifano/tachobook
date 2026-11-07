@@ -171,6 +171,7 @@ final class HomeFlowUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-homeFlowUITest", "-resetHomeFlowTest", "-seedNearDutyLimit"]
         app.launch()
+        dismissPreLimitAlert(app)
         XCTAssertTrue(app.buttons["endOfDayButton"].waitForExistence(timeout: 5))
         let gauge = app.descendants(matching: .any)["homeGauge"]
         XCTAssertTrue(gauge.label.contains("14:45"), gauge.label)
@@ -227,11 +228,21 @@ final class HomeFlowUITests: XCTestCase {
         nearLimit.launchArguments = ["-homeFlowUITest", "-resetHomeFlowTest", "-seedNearDutyLimit",
                                      "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
         nearLimit.launch()
+        dismissPreLimitAlert(nearLimit)
         XCTAssertTrue(nearLimit.buttons["endOfDayButton"].waitForExistence(timeout: 5))
         try audit(nearLimit, "near limit")
     }
 
     // MARK: - Helpers
+
+    /// 14:45 of 15 h: the 15-minute alert of the violation counter (Flow 3 · 00) comes first.
+    @MainActor
+    private func dismissPreLimitAlert(_ app: XCUIApplication) {
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Keep working"].tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
+    }
 
     /// Every audit category must pass, contrast included. Issues are collected per state
     /// and reported together so one run shows all of them.

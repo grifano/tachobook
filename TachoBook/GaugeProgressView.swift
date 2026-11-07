@@ -16,9 +16,11 @@ public struct GaugeProgressView: View {
     public var countIcon: ReducedRestRow.Icon
     /// Used (blue) icons in the always-visible row under the arc; nil while the count is unknown (all gray).
     public var reducedRestsUsed: Int?
+    /// Red time past the limit in the warning's place (Flow 3 · 01/03; decisions 3 and 6): a tap opens the sheet.
+    public var overtime: GaugeOvertime?
 
     public init(limit: String, value: String, progress: Double, tint: Color, warning: String? = nil,
-                countIcon: ReducedRestRow.Icon, reducedRestsUsed: Int?) {
+                countIcon: ReducedRestRow.Icon, reducedRestsUsed: Int?, overtime: GaugeOvertime? = nil) {
         self.limit = limit
         self.value = value
         self.progress = progress
@@ -26,6 +28,7 @@ public struct GaugeProgressView: View {
         self.warning = warning
         self.countIcon = countIcon
         self.reducedRestsUsed = reducedRestsUsed
+        self.overtime = overtime
     }
 
     public var body: some View {
@@ -35,6 +38,27 @@ public struct GaugeProgressView: View {
             ReducedRestRow(icon: countIcon, used: reducedRestsUsed)
         }
         .frame(width: 169, height: 161)
+        // A button of its own, outside the combined gauge label, so VoiceOver can activate it.
+        .overlay(alignment: .top) {
+            if let overtime {
+                Button(action: overtime.action) {
+                    Label(overtime.text, systemImage: "exclamationmark.circle.fill")
+                        .labelStyle(TightLabelStyle())
+                        .font(.footnote.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(TachoTheme.alertRedText)
+                        .fixedSize()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 109)
+                .accessibilityLabel("Over the limit by \(overtime.spoken)")
+                .accessibilityHint("Shows details")
+                .accessibilityIdentifier("dutyOvertime")
+            }
+        }
     }
 
     private var gauge: some View {
@@ -67,8 +91,8 @@ public struct GaugeProgressView: View {
             .padding(.top, 51)
 
             // Below the value across the gauge's full width, so it is never clipped by the
-            // 96 pt centre at large text sizes.
-            if let warning {
+            // 96 pt centre at large text sizes. Past the limit the red overtime takes its place.
+            if let warning, overtime == nil {
                 Label(warning, systemImage: "exclamationmark.circle")
                     .labelStyle(TightLabelStyle())
                     .font(.footnote.weight(.semibold))
@@ -83,6 +107,22 @@ public struct GaugeProgressView: View {
         .frame(width: 169, height: 161)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("homeGauge")
+    }
+}
+
+/// The red overtime under the Work gauge and what a tap on it does.
+public struct GaugeOvertime {
+    /// "00:30".
+    public var text: String
+    /// "30 minutes" or "1 hour, 5 minutes" for VoiceOver.
+    public var spoken: String
+    public var action: () -> Void
+
+    public init(seconds: Int, action: @escaping () -> Void) {
+        text = HomeTimeline.clockDuration(seconds: seconds)
+        spoken = Duration.seconds(seconds - seconds % 60)
+            .formatted(.units(allowed: [.hours, .minutes], width: .wide))
+        self.action = action
     }
 }
 

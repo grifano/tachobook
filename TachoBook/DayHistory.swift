@@ -68,6 +68,8 @@ public enum TimeEntryIssue: Equatable {
     /// `to` nil means the current (open) shift.
     case overlap(from: Date, to: Date?)
     case outsideDay(Date)
+    /// A printout time before the violation began (decision 19). Proposed copy, awaiting Serhii's approval.
+    case printoutTooEarly(Date, ViolationKind)
     case other
 
     /// Interim copy, plain and friendly; dates follow the device locale.
@@ -83,6 +85,11 @@ public enum TimeEntryIssue: Equatable {
             return "This overlaps your shift from \(begin) to \(HomeTimeline.dayAndTime(to, calendar: calendar))."
         case .outsideDay(let day):
             return "Pick a time on \(HomeTimeline.weekdayAndDay(day, calendar: calendar))."
+        case .printoutTooEarly(let began, let kind):
+            let moment = HomeTimeline.dayAndTime(began, calendar: calendar)
+            return kind == .dutyLimit
+                ? "Pick a time after your limit passed (\(moment))."
+                : "Pick a time after your rest started (\(moment))."
         case .other:
             return nil
         }
