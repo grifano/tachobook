@@ -44,4 +44,11 @@ public struct DutyPeriod: Codable, Identifiable {
 struct ShiftJournal: Codable {
     var current: DutyPeriod
     var history: [DutyPeriod] = []
+    /// When each violation's printout was made (owner decisions 9 and 16). Saved in the store, not in the legacy JSON.
+    var printouts: [ViolationKey: Date] = [:]
+
+    private enum CodingKeys: String, CodingKey {
+        case current
+        case history
+    }
 }

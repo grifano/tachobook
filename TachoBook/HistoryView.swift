@@ -10,6 +10,8 @@ import UIKit
 /// A tap on a date opens the read-only Day summary sheet (frame 02, 708:31844). Browsing never writes.
 struct HistoryView: View {
     var model: DayLogModel
+    /// Shows the Violations tab: "Go to rule" on a day with several violations (decision 20).
+    var onOpenViolations: () -> Void = {}
     @State private var summaryDay: SummaryDay?
 
     struct SummaryDay: Identifiable {
@@ -35,7 +37,11 @@ struct HistoryView: View {
         }
         .background { HistoryBackground() }
         .sheet(item: $summaryDay) { day in
-            DaySummarySheet(model: model, day: day.date, onClose: { summaryDay = nil })
+            DaySummarySheet(model: model, day: day.date, onClose: { summaryDay = nil },
+                            onOpenViolations: {
+                                summaryDay = nil
+                                onOpenViolations()
+                            })
         }
     }
 
@@ -62,8 +68,8 @@ struct HistoryView: View {
     }
 }
 
-/// The Home photo with its darker top, behind the header and the card.
-private struct HistoryBackground: View {
+/// The Home photo with its darker top, behind the header and the card (History and Violations).
+struct HistoryBackground: View {
     var body: some View {
         ZStack(alignment: .top) {
             Image("DashboardBackground")
@@ -77,8 +83,8 @@ private struct HistoryBackground: View {
     }
 }
 
-/// Figma "Legenda" with the interim copy of owner decision 6: the hint, then bed and wheel.
-/// The "Rule broken this day" line comes with the violations task (decision 3).
+/// Figma "Legenda" with the interim copy of owner decision 6: the hint, then bed, wheel and the red "!"
+/// (Flow 3 View History, frame 01, 750:15146).
 struct HistoryLegend: View {
     /// One column for both icons (the bed is wider than the wheel), so the texts line up.
     @ScaledMetric(relativeTo: .caption) private var iconWidth: CGFloat = 14
@@ -93,7 +99,7 @@ struct HistoryLegend: View {
                     Image(systemName: entry.symbol)
                         .font(.caption2.weight(.semibold))
                         .imageScale(.small)
-                        .foregroundStyle(Color.tachoBlue)
+                        .foregroundStyle(entry.color)
                         .frame(width: iconWidth)
                         .accessibilityHidden(true)
                     // Caption (12 pt), not Figma's Caption 2 (11 pt): the accessibility audit flagged Caption 2
@@ -112,17 +118,21 @@ struct HistoryLegend: View {
     struct Entry {
         var symbol: String
         var text: String
+        var color: Color = .tachoBlue
         static let all = [
             Entry(symbol: HistoryMarkerSymbol.reducedRest, text: "Reduced rest (9–11 h)"),
             Entry(symbol: HistoryMarkerSymbol.extendedDriving, text: "Extended driving (10 h)"),
+            Entry(symbol: HistoryMarkerSymbol.violation, text: "Rule broken this day", color: .tachoRed),
         ]
     }
 }
 
-/// SF Symbols of the Figma markers "Icon / Rest" and "Icon / Drive", in the brand blue (#116B93).
+/// SF Symbols of the Figma markers "Icon / Rest" and "Icon / Drive", in the brand blue (#116B93), and the red
+/// violation mark (#DE635A).
 enum HistoryMarkerSymbol {
     static let reducedRest = "bed.double.fill"
     static let extendedDriving = "steeringwheel"
+    static let violation = "exclamationmark.circle.fill"
 }
 
 // MARK: - Native calendar (owner decision 1)
@@ -240,12 +250,13 @@ struct HistoryCalendar: UIViewRepresentable {
 enum HistoryMarkerRow {
     static func image(_ markers: HistoryDayMarkers) -> UIImage? {
         let configuration = UIImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
-        var symbols: [String] = []
-        if markers.contains(.extendedDriving) { symbols.append(HistoryMarkerSymbol.extendedDriving) }
-        if markers.contains(.reducedRest) { symbols.append(HistoryMarkerSymbol.reducedRest) }
+        var symbols: [(name: String, color: Color)] = []
+        if markers.contains(.extendedDriving) { symbols.append((HistoryMarkerSymbol.extendedDriving, .tachoBlue)) }
+        if markers.contains(.reducedRest) { symbols.append((HistoryMarkerSymbol.reducedRest, .tachoBlue)) }
+        if markers.contains(.violation) { symbols.append((HistoryMarkerSymbol.violation, .tachoRed)) }
         let images = symbols.compactMap {
-            UIImage(systemName: $0, withConfiguration: configuration)?
-                .withTintColor(UIColor(Color.tachoBlue), renderingMode: .alwaysOriginal)
+            UIImage(systemName: $0.name, withConfiguration: configuration)?
+                .withTintColor(UIColor($0.color), renderingMode: .alwaysOriginal)
         }
         guard !images.isEmpty else { return nil }
         let spacing: CGFloat = 4

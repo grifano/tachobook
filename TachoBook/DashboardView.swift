@@ -17,8 +17,16 @@ public struct DashboardView: View {
         case pastDayStart
         case pastDayEnd
         case pastDriving
+        /// Flow 3 · 02/04: the current shift past its limit.
+        case violation
 
         var id: String { rawValue }
+    }
+
+    /// Flow 3 · 00 and 00b: in-app alerts before and after the applicable limit (decisions 12 and 13).
+    enum LimitAlert: Equatable {
+        case approaching(minutes: Int, limit: Int, limitEnd: String)
+        case passed(limit: Int, overtime: String)
     }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -30,6 +38,7 @@ public struct DashboardView: View {
     @State private var drivingAlertPending = false
     /// The time the full 11 h rest ends, shown in the early-start warning at 3 of 3; nil while the alert is hidden.
     @State private var earlyStartRestEnd: String?
+    @State private var limitAlert: LimitAlert?
     /// 0 is today (the live Home); 1…`DayHistory.maxDaysBack` are earlier days. View state only:
     /// browsing never writes to the store.
     @State private var daysBack = DashboardView.initialDaysBack
@@ -144,6 +153,73 @@ public struct DashboardView: View {
         } message: { time in
             Text("Starting now breaks the rest rules. Rest until \(time) for the full 11 hours.")
         }
+        // Flow 3 · 00 (approved copy): 15 min before the applicable limit, once.
+        .alert(approachingTitle, isPresented: limitAlertShown(approaching: true)) {
+            Button("End of day") { present(.closeShift) }
+            Button("Keep working") {}
+                .keyboardShortcut(.defaultAction)
+        } message: {
+            if case .approaching(_, _, let limitEnd) = limitAlert {
+                Text("Start your rest by \(limitEnd) to stay within the limit. Keep working?")
+            }
+        }
+        // Flow 3 · 00b (approved copy): once, when the limit is passed.
+        .alert(passedTitle, isPresented: limitAlertShown(approaching: false)) {
+            Button("Later") {}
+            Button("Show details") { present(.violation) }
+                .keyboardShortcut(.defaultAction)
+        } message: {
+            if case .passed(_, let overtime) = limitAlert {
+                Text("You\u{2019}re \(overtime) over your shift limit. Print a tachograph log when you stop.")
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                checkLimitAlerts(now: Date())
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    // MARK: - Limit alerts (decisions 2, 12, 13)
+
+    private var approachingTitle: String {
+        guard case .approaching(let minutes, let limit, _) = limitAlert else { return "" }
+        return "\(minutes) min left to your \(limit)h limit"
+    }
+
+    private var passedTitle: String {
+        guard case .passed(let limit, _) = limitAlert else { return "" }
+        return "\u{2757} \(limit)h limit passed"
+    }
+
+    private func limitAlertShown(approaching: Bool) -> Binding<Bool> {
+        Binding(get: {
+            switch limitAlert {
+            case .approaching: approaching
+            case .passed: !approaching
+            case nil: false
+            }
+        }, set: { if !$0 { limitAlert = nil } })
+    }
+
+    /// Shows each alert once per shift and limit, only on today's Home while the shift runs and nothing else is open.
+    private func checkLimitAlerts(now: Date) {
+        guard daysBack == 0, model.isShiftOpen, let start = model.dayStart, model.storageError == nil,
+              sheet == nil, limitAlert == nil, !showDrivingAlert, earlyStartRestEnd == nil else { return }
+        let limit = ViolationRules.applicableLimitHours(model.dutyLimitAvailability)
+        let base = "\(model.dutyID.uuidString)-\(limit)h"
+        if let violation = model.currentDutyViolation(now: now), violation.isOngoing {
+            guard LimitAlertLog.markShown(base + "-passed") else { return }
+            LimitAlertLog.markShown(base + "-approaching")
+            limitAlert = .passed(limit: violation.limitHours, overtime: ViolationCopy.duration(violation.overtimeSeconds))
+            return
+        }
+        let limitEnd = HomeTimeline.adding(hours: limit, to: start)
+        let left = limitEnd.timeIntervalSince(now)
+        guard left > 0, left <= LimitAlertLog.leadTime, LimitAlertLog.markShown(base + "-approaching") else { return }
+        limitAlert = .approaching(minutes: Int((left / 60).rounded(.up)), limit: limit,
+                                  limitEnd: HomeTimeline.clockLabel(limitEnd, relativeTo: now))
     }
 
     private var earlyStartAlert: Binding<Bool> {
@@ -200,11 +276,15 @@ public struct DashboardView: View {
         // 13 h only at 3 of 3 without a confirmed split (R-D05; decisions 4–5, 30.10.2026).
         let limits = model.dutyLimitAvailability
         // A frozen shift is judged at its close time, a running one at now.
+        // Past the applicable limit: red overtime under the timer; a tap opens the violation sheet (decisions 3, 6).
+        let overtime = model.currentDutyViolation(now: now).map { violation in
+            GaugeOvertime(seconds: violation.overtimeSeconds) { present(.violation) }
+        }
         return workWidget(start: start, elapsed: model.shiftElapsedSeconds(at: now) ?? 0,
                           instant: model.currentRestStart ?? now, subtitle: subtitle,
                           isRestEnabled: model.isResting, labelsRelativeTo: now,
                           limitHours: HomeTimeline.dutyGaugeHours(limits), limits: limits,
-                          reducedRestsUsed: model.homeReducedRests(now: now))
+                          reducedRestsUsed: model.homeReducedRests(now: now), overtime: overtime)
     }
 
     /// Work card for any shift. `elapsed` nil shows the "--:--" placeholder instead of zeros.
@@ -215,7 +295,7 @@ public struct DashboardView: View {
                             isRestEnabled: Bool, labelsRelativeTo reference: Date,
                             placeholder: String = "--:--", limitHours: Int = HomeTimeline.dutyMarkerHours.second,
                             limits: DutyLimitAvailability = .fifteenHours,
-                            reducedRestsUsed: Int?) -> some View {
+                            reducedRestsUsed: Int?, overtime: GaugeOvertime? = nil) -> some View {
         let scaleHours = HomeTimeline.dutyGaugeHours(limits)
         let warning = start.flatMap { start in
             elapsed != nil && HomeTimeline.isDutyWarning(shiftStart: start, at: instant, limitHours: scaleHours)
@@ -231,7 +311,8 @@ public struct DashboardView: View {
                 limit: "\(limitHours)h",
                 value: elapsed.map { HomeTimeline.clockDuration(seconds: $0) } ?? placeholder,
                 progress: Double(elapsed ?? 0) / (Double(scaleHours) * 3600),
-                tint: .tachoOrange, warning: warning, countIcon: .hammer, reducedRestsUsed: reducedRestsUsed),
+                tint: .tachoOrange, warning: warning, countIcon: .hammer, reducedRestsUsed: reducedRestsUsed,
+                overtime: overtime),
             limits: HomeTimeline.shownDutyMarkerHours(limits).map { hours in
                 HomeLimit(label: "\(hours)h limit end",
                           value: start.map { HomeTimeline.clockLabel(HomeTimeline.adding(hours: hours, to: $0),
@@ -512,16 +593,19 @@ public struct DashboardView: View {
         case .startShift:
             TimeEntrySheet(kind: .shiftStart, initialDate: Date(),
                            check: { model.checkStartShift(at: $0, now: Date()) },
+                           warning: overLimitLine(currentShift: { $0.startShift(at: $1, now: Date()) }),
                            onConfirm: { model.startShift(at: $0, now: Date()); dismissSheet() },
                            onCancel: dismissSheet)
         case .editDayStart:
             TimeEntrySheet(kind: .shiftStart, initialDate: model.dayStart ?? Date(),
                            check: { model.checkEditDayStart($0, now: Date()) },
+                           warning: overLimitLine(currentShift: { $0.editDayStart($1, now: Date()) }),
                            onConfirm: { model.editDayStart($0, now: Date()); dismissSheet() },
                            onCancel: dismissSheet)
         case .closeShift:
             TimeEntrySheet(kind: .restStart, initialDate: Date(),
                            check: { model.checkCloseShift(at: $0, now: Date()) },
+                           warning: overLimitLine(currentShift: { $0.closeShift(at: $1, now: Date()) }),
                            onConfirm: { date in
                                model.closeShift(at: date, now: Date())
                                drivingAlertPending = model.isResting
@@ -531,6 +615,7 @@ public struct DashboardView: View {
         case .editDayEnd:
             TimeEntrySheet(kind: .restStart, initialDate: model.dayEnd ?? Date(),
                            check: { model.checkEditDayEnd($0, now: Date()) },
+                           warning: overLimitLine(currentShift: { $0.editDayEnd($1, now: Date()) }),
                            onConfirm: { model.editDayEnd($0, now: Date()); dismissSheet() },
                            onCancel: dismissSheet)
         case .driving:
@@ -543,6 +628,7 @@ public struct DashboardView: View {
             TimeEntrySheet(kind: .shiftStart, initialDate: record?.start ?? DayHistory.combine(day: day, timeOf: now),
                            range: DayHistory.range(of: day),
                            check: { model.checkSetStart($0, onDay: day, now: Date()) },
+                           warning: overLimitLine(day: day, change: { $0.setStart($1, onDay: day, now: Date()) }),
                            onConfirm: { model.setStart($0, onDay: day, now: Date()); dismissSheet() },
                            onCancel: dismissSheet)
         case .pastDayEnd:
@@ -552,6 +638,7 @@ public struct DashboardView: View {
             TimeEntrySheet(kind: .restStart, initialDate: record?.end ?? DayHistory.combine(day: day, timeOf: now),
                            range: floor...max(floor, now),
                            check: { model.checkSetEnd($0, onDay: day, now: Date()) },
+                           warning: overLimitLine(day: day, change: { $0.setEnd($1, onDay: day, now: Date()) }),
                            onConfirm: { model.setEnd($0, onDay: day, now: Date()); dismissSheet() },
                            onCancel: dismissSheet)
         case .pastDriving:
@@ -559,6 +646,25 @@ public struct DashboardView: View {
             DailyDrivingSheet(initialMinutes: model.dayRecord(on: day)?.drivingMinutes,
                               onConfirm: { model.setDriving(minutes: $0, onDay: day); dismissSheet() },
                               onCancel: dismissSheet)
+        case .violation:
+            ViolationSheet(model: model, key: ViolationKey(periodID: model.dutyID, kind: .dutyLimit), style: .home,
+                           onClose: dismissSheet)
+        }
+    }
+
+    /// Decision 14: the red line when the entered time would push the current shift past its limit.
+    private func overLimitLine(currentShift change: @escaping (DayLogModel, Date) -> Void) -> (Date) -> String? {
+        { date in
+            DayLogModel.overLimitLine(model.dutyViolation(previewing: { change($0, date) }, periodID: { $0.dutyID },
+                                                          now: Date()))
+        }
+    }
+
+    /// Decision 14 for an earlier day: the shift shown for that day after the change.
+    private func overLimitLine(day: Date, change: @escaping (DayLogModel, Date) -> Void) -> (Date) -> String? {
+        { date in
+            DayLogModel.overLimitLine(model.dutyViolation(previewing: { change($0, date) },
+                                                          periodID: { $0.historyRecord(on: day)?.id }, now: Date()))
         }
     }
 
@@ -573,6 +679,23 @@ public struct DashboardView: View {
         guard drivingAlertPending else { return }
         drivingAlertPending = false
         showDrivingAlert = true
+    }
+}
+
+/// Which limit alerts were already shown, so each appears once per shift and limit, also across relaunches.
+enum LimitAlertLog {
+    /// Decision 12: 15 min before the applicable limit.
+    static let leadTime: TimeInterval = 15 * 60
+    private static let key = "limitAlertsShown"
+
+    /// Records `id`; false when it was already shown.
+    @discardableResult
+    static func markShown(_ id: String, defaults: UserDefaults = .standard) -> Bool {
+        var shown = defaults.stringArray(forKey: key) ?? []
+        guard !shown.contains(id) else { return false }
+        shown.append(id)
+        defaults.set(Array(shown.suffix(40)), forKey: key)
+        return true
     }
 }
 

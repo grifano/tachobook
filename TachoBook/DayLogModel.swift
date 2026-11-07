@@ -46,6 +46,11 @@ public final class DayLogModel {
         }
     }
 
+    /// An in-memory copy of `journal`, for judging a change before it is saved (decision 14).
+    init(journal: ShiftJournal) {
+        state = journal
+    }
+
     public static func dashboardModel() -> DayLogModel {
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-sampleData") { return DayLogModel() }
@@ -111,6 +116,8 @@ public final class DayLogModel {
                 model.seedReducedRestsIfEmpty(used: used, restElapsed: restElapsed, now: Date(),
                                               openShiftElapsed: minutes("-seedOpenShiftMinutes"),
                                               closedShiftDuty: minutes("-seedDutyMinutes") ?? 3 * 3600)
+            } else if args.contains("-seedViolations"), model.isEmpty {
+                model.seedViolationsIfEmpty(now: Date())
             } else if args.contains("-seedCountHistory"), model.isEmpty {
                 model.seedCountHistoryIfEmpty(now: Date())
             } else if args.contains("-seedHistoryWeek"), model.isEmpty {
@@ -197,6 +204,30 @@ public final class DayLogModel {
             return DutyPeriod(date: shift.0, start: shift.0, drivingMinutes: drivingMinutes[index], end: shift.1, isClosed: true,
                               rests: [RestSegment(start: shift.1, end: next, dailyRestConfirmed: next.map { _ in true },
                                                   kind: index == 0 ? .weekly : .daily)])
+        }
+        update { journal in
+            journal.history = Array(periods.dropLast())
+            journal.current = periods[periods.count - 1]
+        }
+    }
+
+    /// Records for the Violations tab, independent of the time of day (no weekly rest, so only past 15 h counts):
+    /// 70 days ago a 12 h shift and an 8 h rest (older than 56 days), 3 days ago a 16 h shift and an 8 h rest
+    /// (shift limit passed by 1:00, daily rest under 9 h), then 2 days ago a 10 h shift whose rest still runs.
+    /// Never replaces stored data.
+    public func seedViolationsIfEmpty(now: Date, calendar: Calendar = .current) {
+        guard isEmpty else { return }
+        let today = calendar.startOfDay(for: now)
+        func at(_ daysBack: Int, _ hour: Int) -> Date {
+            let day = calendar.date(byAdding: .day, value: -daysBack, to: today) ?? today
+            return calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day
+        }
+        let shifts = [(at(70, 6), at(70, 18)), (at(69, 2), at(69, 10)), (at(3, 5), at(3, 21)), (at(2, 5), at(2, 15))]
+        let periods = shifts.enumerated().map { index, shift in
+            let next = index + 1 < shifts.count ? shifts[index + 1].0 : nil
+            return DutyPeriod(date: shift.0, start: shift.0, drivingMinutes: 480, end: shift.1, isClosed: true,
+                              rests: [RestSegment(start: shift.1, end: next, dailyRestConfirmed: next.map { _ in true },
+                                                  kind: .daily)])
         }
         update { journal in
             journal.history = Array(periods.dropLast())

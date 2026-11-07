@@ -5,17 +5,20 @@
 
 import SwiftUI
 
-/// Figma frames 02 and 05: date and time of a shift start or a rest start.
+/// Figma frames 02 and 05: date and time of a shift start or a rest start; Flow 4 · 09: the printout time.
 /// Used to record new events and to edit existing ones (prefilled with the current value).
 public struct TimeEntrySheet: View {
     public enum Kind {
         case shiftStart
         case restStart
+        /// Flow 4 · 09: when the printout was made (decision 18). No symbol, as in Figma.
+        case printout
 
         var title: String {
             switch self {
             case .shiftStart: "Shift start"
             case .restStart: "Rest start"
+            case .printout: "Printout time"
             }
         }
 
@@ -23,13 +26,15 @@ public struct TimeEntrySheet: View {
             switch self {
             case .shiftStart: "When did your shift begin?"
             case .restStart: "When did your rest begin?"
+            case .printout: "When did you print it?"
             }
         }
 
-        var icon: String {
+        var icon: String? {
             switch self {
             case .shiftStart: "SheetShiftStartIcon"
             case .restStart: "SheetRestStartIcon"
+            case .printout: nil
             }
         }
 
@@ -37,6 +42,7 @@ public struct TimeEntrySheet: View {
             switch self {
             case .shiftStart: 34.1
             case .restStart: 37.8
+            case .printout: 0
             }
         }
     }
@@ -46,16 +52,20 @@ public struct TimeEntrySheet: View {
     var range: ClosedRange<Date>?
     /// nil when the time can be confirmed, else why not (shown under the picker).
     var check: (Date) -> TimeEntryIssue?
+    /// A red line when a valid time pushes the shift past its limit (decision 14); Confirm stays enabled.
+    var warning: (Date) -> String?
     var onConfirm: (Date) -> Void
     var onCancel: () -> Void
 
     @State private var date: Date
 
     public init(kind: Kind, initialDate: Date, range: ClosedRange<Date>? = nil, check: @escaping (Date) -> TimeEntryIssue?,
+                warning: @escaping (Date) -> String? = { _ in nil },
                 onConfirm: @escaping (Date) -> Void, onCancel: @escaping () -> Void) {
         self.kind = kind
         self.range = range
         self.check = check
+        self.warning = warning
         self.onConfirm = onConfirm
         self.onCancel = onCancel
         _date = State(initialValue: initialDate)
@@ -66,13 +76,18 @@ public struct TimeEntrySheet: View {
             SheetToolbar(title: kind.title, subtitle: kind.subtitle, canConfirm: check(date) == nil,
                          onCancel: onCancel, onConfirm: { onConfirm(date) })
             VStack(spacing: 16) {
-                SheetSymbol(image: kind.icon, height: kind.iconHeight)
+                if let icon = kind.icon {
+                    SheetSymbol(image: icon, height: kind.iconHeight)
+                }
                 picker
                     .datePickerStyle(.compact)
                     .labelsHidden()
                     .accessibilityIdentifier("sheetDatePicker")
                 // Why Confirm is disabled; sits below the picker so the picker never moves.
-                let reason = check(date)?.message()
+                // The F4 reason takes precedence: the red line shows only for a time that can be confirmed.
+                let issue = check(date)
+                let reason = issue?.message()
+                let overLimit = issue == nil ? warning(date) : nil
                 if let reason {
                     Text(reason)
                         .font(.footnote)
@@ -82,10 +97,21 @@ public struct TimeEntrySheet: View {
                         .padding(.horizontal, 24)
                         .accessibilityIdentifier("sheetReason")
                         .transition(.opacity)
+                } else if let overLimit {
+                    // The same style as the violation sheet's red line (Flow 3).
+                    Text(overLimit)
+                        .font(.body)
+                        .foregroundStyle(TachoTheme.alertRedText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 24)
+                        .accessibilityIdentifier("sheetOverLimit")
+                        .transition(.opacity)
                 }
             }
             .padding(.top, 59)
             .animation(.default, value: check(date)?.message())
+            .animation(.default, value: warning(date))
             Spacer(minLength: 24)
         }
         .foregroundStyle(Color.tachoTextOnLight)

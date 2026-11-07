@@ -6,19 +6,24 @@
 import SwiftUI
 
 /// Figma frame 02 "Day tapped - Day summary sheet (medium)" (708:31844): a read-only summary of one day
-/// with the Work and Rest gauges and the Day Times Row as on Home. No violation text yet (decision 5) and
-/// no country codes (decision 8). Every value comes from the same helpers as Home.
+/// with the Work and Rest gauges and the Day Times Row as on Home; no country codes (decision 8). A day with a
+/// recorded deviation opens full height with its lines and "Go to rule" / "Skip for now" (Flow 3 View History,
+/// frame 03, 750:15188; decision 20). Every value comes from the same helpers as Home.
 struct DaySummarySheet: View {
     var model: DayLogModel
     var day: Date
     var onClose: () -> Void
+    /// Several violations on one day: "Go to rule" opens the Violations list instead (not in Figma, decision 20).
+    var onOpenViolations: () -> Void = {}
+    @State private var rule: ViolationKey?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let now = context.date
             let summary = DaySummary(model: model, day: day, now: now)
             VStack(spacing: 0) {
-                DaySummaryToolbar(subtitle: summary.subtitle, onClose: onClose)
+                TitledSheetToolbar(title: "Day summary", subtitle: summary.subtitle,
+                                   subtitleIdentifier: "daySummaryDate", onClose: onClose)
                 ScrollView {
                     if summary.isEmpty {
                         Text("No records for this day.")
@@ -33,10 +38,17 @@ struct DaySummarySheet: View {
                     }
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                if !summary.violations.isEmpty {
+                    ruleButtons(summary)
+                }
             }
         }
         .environment(\.colorScheme, .light)
-        .presentationDetents([.medium, .large])
+        // Frame 03 is full height; a day without a violation keeps the medium sheet (frame 02).
+        .presentationDetents(hasViolations ? [.large] : [.medium, .large])
+        .sheet(item: $rule) { key in
+            ViolationSheet(model: model, key: key, style: .list, onClose: { rule = nil })
+        }
         .presentationDragIndicator(.hidden)
         .presentationBackground(Color(red: 245/255, green: 245/255, blue: 245/255))
     }
@@ -49,9 +61,56 @@ struct DaySummarySheet: View {
             }
             .frame(maxWidth: .infinity)
             DayTimesRow(items: summary.times)
+            if !summary.violations.isEmpty {
+                violationLines(summary)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
+        .padding(.bottom, 16)
+    }
+
+    private var hasViolations: Bool {
+        !model.violations(now: Date()).filter { $0.day == Calendar.current.startOfDay(for: day) }.isEmpty
+    }
+
+    /// One red line per violation and its status line: the reminder while the printout is missing, the green
+    /// counter once it is done (decision 20 d, e).
+    private func violationLines(_ summary: DaySummary) -> some View {
+        VStack(spacing: 8) {
+            ForEach(summary.violations) { line in
+                Text(line.red)
+                    .foregroundStyle(TachoTheme.alertRedText)
+                    .accessibilityIdentifier("daySummaryRedLine")
+                Text(line.status)
+                    .foregroundStyle(line.isPrintoutDone ? TachoTheme.successGreenText : Color.tachoTextOnLight)
+                    .accessibilityIdentifier("daySummaryStatusLine")
+            }
+        }
+        .font(.body)
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 16)
+    }
+
+    private func ruleButtons(_ summary: DaySummary) -> some View {
+        VStack(spacing: 8) {
+            Button {
+                if summary.violations.count == 1 {
+                    rule = summary.violations[0].id
+                } else {
+                    onOpenViolations()
+                }
+            } label: {
+                SheetCapsuleLabel(title: "Go to rule", fill: TachoTheme.orangeStrong)
+            }
+            .buttonStyle(HomeCapsuleButtonStyle())
+            .accessibilityIdentifier("goToRuleButton")
+            Button("Skip for now", action: onClose)
+                .buttonStyle(SheetTextButtonStyle())
+                .accessibilityIdentifier("skipForNowButton")
+        }
+        .padding(.horizontal, 32)
         .padding(.bottom, 16)
     }
 
@@ -88,13 +147,33 @@ struct DaySummary {
     var restProgress: Double
     var reducedRestsUsed: Int?
     var times: [Time]
+    var violations: [ViolationLine]
+
+    /// The lines of one recorded deviation on this day.
+    struct ViolationLine: Identifiable {
+        var id: ViolationKey
+        var red: String
+        var status: String
+        var isPrintoutDone: Bool
+    }
 
     init(model: DayLogModel, day: Date, now: Date, calendar: Calendar = .current) {
         let day = calendar.startOfDay(for: day)
         let record = model.historyRecord(on: day, calendar: calendar)
-        // "20 Apr 2026" as in Figma: Home's date label with the year.
-        subtitle = "\(HomeTimeline.dateLabel(day, calendar: calendar)) \(calendar.component(.year, from: day))"
+        // "20 Apr 2026 · 1 violation" as in Figma: Home's date label with the year, then the count (decision 20 c).
+        let date = "\(HomeTimeline.dateLabel(day, calendar: calendar)) \(calendar.component(.year, from: day))"
         isEmpty = record == nil
+        let found = model.violations(now: now, calendar: calendar).filter { $0.day == day }.reversed()
+        violations = found.map { violation in
+            let printedAt = model.printout(for: violation.key)
+            let status = model.carryStatus(of: violation, now: now, calendar: calendar)
+            return ViolationLine(
+                id: violation.key, red: ViolationCopy.redLine(violation),
+                status: printedAt.map { ViolationCopy.printoutLine(printedAt: $0, status: status, calendar: calendar) }
+                    ?? ViolationCopy.reminder,
+                isPrintoutDone: printedAt != nil)
+        }
+        subtitle = isEmpty && violations.isEmpty ? date : "\(date) · \(ViolationCopy.violationCount(violations.count))"
 
         // Work: start to close, or to now while the shift is open (as the Home Work card).
         let isOpen = record?.id == model.dutyID && model.isShiftOpen
@@ -148,50 +227,5 @@ private struct DayTimesRow: View {
             }
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-/// Figma "Toolbar - Top - Sheet": orange grabber, centred title and date, close button on the right.
-private struct DaySummaryToolbar: View {
-    var subtitle: String
-    var onClose: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Capsule()
-                .fill(Color.tachoOrange)
-                .frame(width: 36, height: 5)
-                .padding(.top, 5)
-                .padding(.bottom, 6)
-                .accessibilityHidden(true)
-            HStack(spacing: 8) {
-                // Balances the close button so the title stays centred.
-                Color.clear.frame(width: 44, height: 44)
-                VStack(spacing: 0) {
-                    Text("Day summary")
-                        .font(.subheadline.weight(.semibold))
-                        .accessibilityAddTraits(.isHeader)
-                    Text(subtitle)
-                        .font(.caption.weight(.medium))
-                        .accessibilityIdentifier("daySummaryDate")
-                }
-                .foregroundStyle(Color.tachoTextOnLight)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(maxWidth: .infinity)
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(Color.tachoTextOnDark)
-                        .frame(width: 44, height: 44)
-                        .background(TachoTheme.orangeStrong, in: Circle())
-                }
-                .accessibilityLabel("Close")
-                .accessibilityIdentifier("closeSheetButton")
-            }
-            .padding(.horizontal, 16)
-        }
-        .padding(.top, 6)
-        .padding(.bottom, 10)
     }
 }

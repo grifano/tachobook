@@ -116,7 +116,10 @@ struct HistoryMarkersTests {
         let model = model([(date(10, 6), date(10, 14), nil), (date(12, 6), date(12, 22), nil),
                            (date(14, 8), date(14, 16), nil)])
         let now = date(15, 12)
-        #expect(model.historyMarkers(on: day(12), now: now, calendar: calendar) == [.reducedRest])
+        // The 16 h shift passed its 15 h limit: a recorded deviation (violation counter, decision 1); its 34 h rest
+        // is judged in full, so it is the only one (decision 22).
+        #expect(model.violations(now: now, calendar: calendar).filter { $0.day == day(12) }.map(\.kind) == [.dutyLimit])
+        #expect(model.historyMarkers(on: day(12), now: now, calendar: calendar) == [.reducedRest, .violation])
         #expect(model.historyReducedRests(onDay: day(12), now: now, calendar: calendar) == 1)
         #expect(model.historyReducedRests(onDay: day(14), now: now, calendar: calendar) == 0)
     }
@@ -191,7 +194,7 @@ struct HistoryMarkersTests {
         let summary = DaySummary(model: model, day: target, now: now, calendar: calendar)
         let record = model.dayRecord(on: target, calendar: calendar)
         #expect(!summary.isEmpty)
-        #expect(summary.subtitle == "\(HomeTimeline.dateLabel(target, calendar: calendar)) 2026")
+        #expect(summary.subtitle == "\(HomeTimeline.dateLabel(target, calendar: calendar)) 2026 · No violations")
         #expect(summary.times.map(\.value) == [
             HomeTimeline.clockLabel(record!.start!, relativeTo: target, calendar: calendar),
             HomeTimeline.drivingLabel(minutes: record?.drivingMinutes),

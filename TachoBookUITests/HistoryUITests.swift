@@ -15,7 +15,7 @@ final class HistoryUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Tap a date to see that day."].exists)
         XCTAssertTrue(app.staticTexts["Reduced rest (9–11 h)"].exists)
         XCTAssertTrue(app.staticTexts["Extended driving (10 h)"].exists)
-        XCTAssertFalse(app.staticTexts["Rule broken this day"].exists, "no violation line yet")
+        XCTAssertTrue(app.staticTexts["Rule broken this day"].exists)
 
         // Each decorated date names its markers for VoiceOver.
         let bedDay = dayCell(app, daysBack: 3)
@@ -46,14 +46,14 @@ final class HistoryUITests: XCTestCase {
         let close = app.buttons["closeSheetButton"]
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Day summary"].exists)
-        XCTAssertEqual(app.staticTexts["daySummaryDate"].label, sheetDate(daysBack: 2))
+        XCTAssertEqual(app.staticTexts["daySummaryDate"].label, "\(sheetDate(daysBack: 2)) · No violations")
         // The 14 h shift 06:00–20:00 with 10 h driving, as Home shows it (DayHistory past-day summary).
         XCTAssertTrue(app.descendants(matching: .any)["daySummaryStarted"].label.contains("06:00"))
         XCTAssertTrue(app.descendants(matching: .any)["daySummaryDriving"].label.contains("10h00m"))
         XCTAssertTrue(app.descendants(matching: .any)["daySummaryClosed"].label.contains("20:00"))
         // Its own reduced rest counts on this day, after the one of the day before.
         XCTAssertTrue(element(app, containing: "2 of 3 reduced rests used").exists)
-        XCTAssertFalse(element(app, containing: "violation").exists, "no violation text (the tab name aside)")
+        XCTAssertFalse(app.buttons["goToRuleButton"].exists, "no violation on this day")
         attach("Day summary with data")
         // iOS 26 draws the medium-detent sheet slightly scaled down, which the audit reads as too-small hit areas
         // and clipped text; it audits the same content in the expanded sheet.
