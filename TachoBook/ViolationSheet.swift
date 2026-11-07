@@ -45,7 +45,7 @@ public enum ViolationCopy {
     public static let reminder = "Print a tachograph log and write the reason on it by hand when you stop."
 
     /// Flow 4 · 03: "Printout done on 19 Oct. Carry it with you until 14 Dec · 56 days left." After the carry period
-    /// the row's wording (Flow 4 · 07) is used.
+    /// the row's wording (Flow 4 · 07) is used (approved by Serhii, 07.11.2026).
     public static func printoutLine(printedAt: Date, status: PrintoutCarry.Status, calendar: Calendar = .current) -> String {
         let printed = HomeTimeline.dateLabel(printedAt, calendar: calendar)
         guard let until = status.carryUntil, let left = status.daysLeft, left >= 0 else {

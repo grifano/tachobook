@@ -68,7 +68,7 @@ public enum TimeEntryIssue: Equatable {
     /// `to` nil means the current (open) shift.
     case overlap(from: Date, to: Date?)
     case outsideDay(Date)
-    /// A printout time before the violation began (decision 19). Proposed copy, awaiting Serhii's approval.
+    /// A printout time before the violation began (decision 19). Copy approved by Serhii, 07.11.2026.
     case printoutTooEarly(Date, ViolationKind)
     case other
 
