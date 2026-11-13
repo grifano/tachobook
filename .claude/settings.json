@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcodebuild:*)",
+      "Bash(xcrun simctl list:*)",
+      "Bash(xcrun simctl boot:*)",
+      "Bash(xcrun simctl io:*)",
+      "Bash(xcrun xcresulttool:*)"
+    ],
+    "deny": [
+      "Bash(xcrun simctl shutdown:*)",
+      "Bash(xcrun simctl erase:*)",
+      "Bash(xcrun simctl delete:*)"
+    ]
+  },
+  "sandbox": {
+    "excludedCommands": ["xcodebuild", "xcrun"]
+  }
+}
