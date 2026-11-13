@@ -167,6 +167,25 @@ Figma frame dimensions represent the reference viewport, not fixed runtime dimen
 - Record actual commands and results. If the environment cannot run iOS checks, report them as not run; never infer a passing build from code inspection.
 - For documentation-only changes, review the diff, links, instruction consistency, and imports; an app build is not required.
 
+### Running tests on the simulator
+
+Serhii watches the app in the Claude desktop app's simulator pane, which is attached to one simulator. Running tests on other simulators, or shutting this one down, detaches the pane, which then asks him to attach a simulator again. A run without a time limit can hang for a long time instead of failing.
+
+- Use one simulator for all builds, tests, and screenshots: **iPhone 17e**, addressed by name, not by UDID. If it is missing, report that and ask before using another device.
+- Do not shut down, erase, delete, or create simulators. Do not run `xcrun simctl shutdown`, `erase`, or `delete`. If the simulator is stuck, stop and ask Serhii.
+- Disable parallel testing, so `xcodebuild` does not create simulator clones.
+- Enable test timeouts, so a hung test fails within minutes.
+- Use the project's stable derived-data folder `.derivedData/` (already git-ignored) rather than a new temporary folder, so each run reuses the previous build and does not reinstall the app from scratch.
+- Run `xcodebuild` as a single command. Do not chain it with `cd`, `rm`, or other commands, so it matches the allowed-command rules in `.claude/settings.json` and runs without a permission prompt.
+
+Full test run, from the repository root:
+
+```sh
+xcodebuild test -project TachoBook.xcodeproj -scheme TachoBook -destination 'platform=iOS Simulator,name=iPhone 17e' -derivedDataPath .derivedData -parallel-testing-enabled NO -test-timeouts-enabled YES -maximum-test-execution-time-allowance 180
+```
+
+For a single test, add `-only-testing:<Target>/<Class>/<testMethod>`. If you need a result bundle (for screenshots or attachments), add `-resultBundlePath .derivedData/Results/<unique-name>.xcresult`. `xcodebuild` refuses to overwrite an existing bundle, so give each run a new name (for example with a timestamp) instead of deleting the old one.
+
 ## Change discipline
 
 - Do not modify unrelated files.
