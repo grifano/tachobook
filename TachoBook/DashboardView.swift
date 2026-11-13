@@ -564,12 +564,14 @@ public struct DashboardView: View {
         let items = [
             HomeSummaryItem(symbol: "play.circle", label: "Day started",
                             value: record?.start.map { HomeTimeline.clockLabel($0, relativeTo: day) } ?? "?",
+                            detail: ShiftPlaceLine(place: record?.startPlace, recordedAt: record?.start),
                             identifier: "summaryDayStarted") { present(.pastDayStart) },
             HomeSummaryItem(symbol: "steeringwheel", label: "Driving",
                             value: HomeTimeline.drivingLabel(minutes: record?.drivingMinutes),
                             identifier: "summaryDriving") { present(.pastDriving) },
             HomeSummaryItem(symbol: "stop.circle", label: "Day closed",
                             value: record?.end.map { HomeTimeline.clockLabel($0, relativeTo: day) } ?? "?",
+                            detail: ShiftPlaceLine(place: record?.endPlace, recordedAt: record?.end),
                             identifier: "summaryDayClosed") { present(.pastDayEnd) },
         ]
         let note = model.restCoverNote(onDay: day, now: now)
@@ -577,7 +579,7 @@ public struct DashboardView: View {
                                  footer: note.map { restCoverFooter($0, now: now) }) { index in
             let item = items[index]
             Button(action: item.action) {
-                HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value)
+                HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value, detail: item.detail)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -638,7 +640,8 @@ public struct DashboardView: View {
                            range: DayHistory.range(of: day),
                            check: { model.checkSetStart($0, onDay: day, now: Date()) },
                            warning: overLimitLine(day: day, change: { $0.setStart($1, onDay: day, now: Date()) }),
-                           onConfirm: { model.setStart($0, onDay: day, now: Date()); dismissSheet() },
+                           country: editCountry(record?.startPlace),
+                           onConfirm: { model.setStart($0, onDay: day, now: Date(), place: $1); dismissSheet() },
                            onCancel: dismissSheet)
         case .pastDayEnd:
             let (day, now) = (viewedDay, Date())
@@ -648,7 +651,8 @@ public struct DashboardView: View {
                            range: floor...max(floor, now),
                            check: { model.checkSetEnd($0, onDay: day, now: Date()) },
                            warning: overLimitLine(day: day, change: { $0.setEnd($1, onDay: day, now: Date()) }),
-                           onConfirm: { model.setEnd($0, onDay: day, now: Date()); dismissSheet() },
+                           country: editCountry(record?.endPlace),
+                           onConfirm: { model.setEnd($0, onDay: day, now: Date(), place: $1); dismissSheet() },
                            onCancel: dismissSheet)
         case .pastDriving:
             let day = viewedDay

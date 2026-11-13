@@ -27,10 +27,15 @@ The 390 pt set is the current one. The 402 pt set was taken before the summary c
 | 8 no location: last country offered | ![](390-8-no-location-last-country.jpg) | ![](402-8-no-location-last-country.jpg) |
 | 9 no location, no history: must choose | ![](390-9-nothing-known.jpg) | ![](402-9-nothing-known.jpg) |
 | 10 History day summary with countries | ![](390-10-history.jpg) | — |
+| 11 earlier day on Home: country added to Day closed | ![](390-11-earlier-day.jpg) | — |
 
 Frame 10 (Serhii, 13.11.2026): History's day summary shows each shift's own countries, as Home does; a shift
 recorded before countries shows "?". It is read-only, like the rest of that sheet. Figma has no frame for it, so it
 reuses the summary's country line.
+
+Frame 11 (Serhii, 13.11.2026): Home's earlier-day "Day summary" card shows the same country line, and its Day started
+/ Day closed sheets change the country together with the time, like today's card. A shift without a country may be
+saved without one; Spain still needs a region.
 
 ## Differences from Figma
 

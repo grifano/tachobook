@@ -228,6 +228,46 @@ struct ShiftCountryModelTests {
         #expect(today.times.map { $0.detail?.text } == ["?", nil, nil], "no close yet, so no line under it")
     }
 
+    /// Home's earlier-day card edits a past shift's country with its time; only that event changes, nil keeps
+    /// the stored country, and Spain without a region is not saved (Serhii, 13.11.2026).
+    @Test func pastDayEditsChangeThatShiftsCountry() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let model = DayLogModel(date: start)
+        model.startShift(at: start, now: now, place: ShiftPlace(country: "H"))
+        let close = start.addingTimeInterval(9 * 3600)
+        model.closeShift(at: close, now: now, place: ShiftPlace(country: "A"))
+        let later = now.addingTimeInterval(24 * 3600)
+        model.startShift(at: start.addingTimeInterval(24 * 3600), now: later, place: ShiftPlace(country: "PL"))
+
+        model.setStart(start, onDay: start, now: later, place: ShiftPlace(country: "SK"), calendar: calendar)
+        #expect(model.dayRecord(on: start, calendar: calendar)?.startPlace == ShiftPlace(country: "SK"))
+        #expect(model.dayRecord(on: start, calendar: calendar)?.endPlace == ShiftPlace(country: "A"))
+        #expect(model.dayStartPlace == ShiftPlace(country: "PL"), "today's shift keeps its own country")
+
+        model.setEnd(close, onDay: start, now: later, place: ShiftPlace(country: "E"), calendar: calendar)
+        #expect(model.dayRecord(on: start, calendar: calendar)?.endPlace == ShiftPlace(country: "A"), "no region")
+        model.setEnd(close, onDay: start, now: later, place: ShiftPlace(country: "E", region: "CAT"), calendar: calendar)
+        #expect(model.dayRecord(on: start, calendar: calendar)?.endPlace == ShiftPlace(country: "E", region: "CAT"))
+
+        model.setStart(start.addingTimeInterval(-600), onDay: start, now: later, calendar: calendar)
+        #expect(model.dayRecord(on: start, calendar: calendar)?.startPlace == ShiftPlace(country: "SK"))
+    }
+
+    /// A start or close added to an empty earlier day keeps the country chosen with it.
+    @Test func pastDayNewEntriesKeepTheirCountry() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let model = DayLogModel(date: start)
+        model.startShift(at: start.addingTimeInterval(3 * 24 * 3600), now: now.addingTimeInterval(3 * 24 * 3600))
+        let later = now.addingTimeInterval(3 * 24 * 3600)
+        model.setStart(start, onDay: start, now: later, place: ShiftPlace(country: "CZ"), calendar: calendar)
+        model.setEnd(start.addingTimeInterval(8 * 3600), onDay: start, now: later,
+                     place: ShiftPlace(country: "D"), calendar: calendar)
+        #expect(model.dayRecord(on: start, calendar: calendar)?.startPlace == ShiftPlace(country: "CZ"))
+        #expect(model.dayRecord(on: start, calendar: calendar)?.endPlace == ShiftPlace(country: "D"))
+    }
+
     @Test func recentCountriesAreFourDifferentNewestFirst() {
         let model = DayLogModel(date: start)
         let codes = ["PL", "D", "PL", "S", "E", "F"]

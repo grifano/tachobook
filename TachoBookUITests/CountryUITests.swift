@@ -140,6 +140,33 @@ final class CountryUITests: XCTestCase {
         app.buttons["closeSheetButton"].tap()
     }
 
+    /// Home's earlier-day card shows "?" for a shift without a country, and its Day closed sheet adds one
+    /// (Serhii, 13.11.2026).
+    @MainActor
+    func testEarlierDayOnHomeShowsAndEditsTheCountry() {
+        // The seeded shift started 49 h ago (`-seedReadyWeeklyRest`); open its day.
+        let calendar = Calendar.current
+        let shiftDay = calendar.startOfDay(for: Date().addingTimeInterval(-49 * 3600))
+        let daysBack = calendar.dateComponents([.day], from: shiftDay, to: calendar.startOfDay(for: Date())).day!
+        let app = launch(["-stubCountry", "PL", "-startDaysBack", "\(daysBack)"])
+        let closed = app.buttons["summaryDayClosed"]
+        XCTAssertTrue(closed.waitForExistence(timeout: 5))
+        XCTAssertTrue(summaryLabel(app, "summaryDayStarted").hasSuffix("?"), app.buttons["summaryDayStarted"].label)
+        XCTAssertTrue(summaryLabel(app, "summaryDayClosed").hasSuffix("?"), closed.label)
+
+        closed.tap()
+        let country = app.buttons["countryPicker"]
+        XCTAssertTrue(country.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["confirmSheetButton"].isEnabled, "an old shift may keep no country")
+        country.tap()
+        pick("Germ", code: "D", in: app)
+        XCTAssertTrue(waitForValue(country, "Germany, D"))
+        confirm(app)
+        XCTAssertTrue(summaryLabel(app, "summaryDayClosed").hasSuffix("Germany, D"), closed.label)
+        XCTAssertTrue(summaryLabel(app, "summaryDayStarted").hasSuffix("?"), "only Day closed changed")
+        attach("Country 11 earlier day on Home")
+    }
+
     /// A first start with no location and no history cannot be confirmed until a country is chosen.
     @MainActor
     func testFirstStartWithoutLocationNeedsACountry() {

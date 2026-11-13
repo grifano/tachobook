@@ -187,16 +187,19 @@ extension DayLogModel {
         return nil
     }
 
-    public func setStart(_ date: Date, onDay day: Date, now: Date, calendar: Calendar = .current) {
-        guard canSetStart(date, onDay: day, now: now, calendar: calendar) else { return }
+    /// `place` replaces the start country; nil keeps the stored one.
+    public func setStart(_ date: Date, onDay day: Date, now: Date, place: ShiftPlace? = nil,
+                         calendar: Calendar = .current) {
+        guard canSetStart(date, onDay: day, now: now, calendar: calendar), place?.isComplete ?? true else { return }
         let record = dayRecord(on: day, calendar: calendar)
-        if isCurrent(record) { return editDayStart(date, now: now) }
+        if isCurrent(record) { return editDayStart(date, now: now, place: place) }
         update { journal in
             if let id = record?.id, let index = journal.history.firstIndex(where: { $0.id == id }) {
                 journal.history[index].start = date
                 journal.history[index].date = date
+                if let place { journal.history[index].startPlace = place }
             } else {
-                journal.history.append(DutyPeriod(date: date, start: date))
+                journal.history.append(DutyPeriod(date: date, start: date, startPlace: place))
             }
             journal.history.sortChronologically()
         }
@@ -222,16 +225,20 @@ extension DayLogModel {
         return nil
     }
 
-    public func setEnd(_ date: Date, onDay day: Date, now: Date, calendar: Calendar = .current) {
-        guard canSetEnd(date, onDay: day, now: now, calendar: calendar) else { return }
+    /// `place` replaces the close country; nil keeps the stored one.
+    public func setEnd(_ date: Date, onDay day: Date, now: Date, place: ShiftPlace? = nil,
+                       calendar: Calendar = .current) {
+        guard canSetEnd(date, onDay: day, now: now, calendar: calendar), place?.isComplete ?? true else { return }
         let record = dayRecord(on: day, calendar: calendar)
-        if isCurrent(record) { return editDayEnd(date, now: now) }
+        if isCurrent(record) { return editDayEnd(date, now: now, place: place) }
         update { journal in
             if let id = record?.id, let index = journal.history.firstIndex(where: { $0.id == id }) {
                 journal.history[index].end = date
                 journal.history[index].isClosed = true
+                if let place { journal.history[index].endPlace = place }
             } else {
-                journal.history.append(DutyPeriod(date: calendar.startOfDay(for: day), end: date, isClosed: true))
+                journal.history.append(DutyPeriod(date: calendar.startOfDay(for: day), end: date, isClosed: true,
+                                                  endPlace: place))
             }
             journal.history.sortChronologically()
         }
