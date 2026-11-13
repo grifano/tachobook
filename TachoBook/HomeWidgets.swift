@@ -237,8 +237,10 @@ struct HomeSecondaryCard<Item: View>: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.tachoTextOnLight)
                 .accessibilityAddTraits(.isHeader)
+            // Top-aligned: a column without a country line (Driving) starts level with the others. Centred, it
+            // sits lower in the taller summary and fails the contrast audit on iOS 27.2 (13.11.2026).
             let layout = dynamicTypeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(spacing: 16)) : AnyLayout(HStackLayout(spacing: 20))
+                ? AnyLayout(VStackLayout(spacing: 16)) : AnyLayout(HStackLayout(alignment: .top, spacing: 20))
             layout { columns(rules: !dynamicTypeSize.isAccessibilitySize) }
             .frame(maxWidth: .infinity)
             if let footer {
