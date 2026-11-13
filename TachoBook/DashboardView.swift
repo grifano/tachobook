@@ -50,6 +50,8 @@ public struct DashboardView: View {
     /// The small "Older days are in History." label after a swipe past the oldest reachable day.
     @State private var showLimitHint = false
     @State private var limitHintToken = 0
+    /// Finds the country for a new Start or Close (a stub in UI tests).
+    private let locator = CountryLocator.forLaunch
 
     /// DEBUG only: `-startDaysBack 1` opens an earlier day, for screenshots and audits.
     private static var initialDaysBack: Int {
@@ -400,12 +402,14 @@ public struct DashboardView: View {
         let items = [
             HomeSummaryItem(symbol: "play.circle", label: "Day started",
                             value: model.dayStart.map { HomeTimeline.clockLabel($0, relativeTo: now) } ?? "?",
+                            detail: ShiftPlaceLine(place: model.dayStartPlace, recordedAt: model.dayStart),
                             identifier: "summaryDayStarted") { present(.editDayStart) },
             HomeSummaryItem(symbol: "steeringwheel", label: "Driving",
                             value: HomeTimeline.drivingLabel(minutes: model.drivingMinutes),
                             identifier: "summaryDriving") { present(.driving) },
             HomeSummaryItem(symbol: "stop.circle", label: "Day closed",
                             value: model.dayEnd.map { HomeTimeline.clockLabel($0, relativeTo: now) } ?? "?",
+                            detail: ShiftPlaceLine(place: model.dayEndPlace, recordedAt: model.dayEnd),
                             identifier: "summaryDayClosed") { present(.editDayEnd) },
         ]
         return HomeSecondaryCard(symbol: "info.circle.fill",
@@ -413,7 +417,7 @@ public struct DashboardView: View {
                                  count: items.count) { index in
             let item = items[index]
             Button(action: item.action) {
-                HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value)
+                HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value, detail: item.detail)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -591,23 +595,27 @@ public struct DashboardView: View {
     private func sheetContent(_ sheet: HomeSheet) -> some View {
         switch sheet {
         case .startShift:
+            // A Resume is a start too (decision 4, 13.11.2026): the same sheet with the country.
             TimeEntrySheet(kind: .shiftStart, initialDate: Date(),
                            check: { model.checkStartShift(at: $0, now: Date()) },
                            warning: overLimitLine(currentShift: { $0.startShift(at: $1, now: Date()) }),
-                           onConfirm: { model.startShift(at: $0, now: Date()); dismissSheet() },
+                           country: newEventCountry,
+                           onConfirm: { model.startShift(at: $0, now: Date(), place: $1); dismissSheet() },
                            onCancel: dismissSheet)
         case .editDayStart:
             TimeEntrySheet(kind: .shiftStart, initialDate: model.dayStart ?? Date(),
                            check: { model.checkEditDayStart($0, now: Date()) },
                            warning: overLimitLine(currentShift: { $0.editDayStart($1, now: Date()) }),
-                           onConfirm: { model.editDayStart($0, now: Date()); dismissSheet() },
+                           country: editCountry(model.dayStartPlace),
+                           onConfirm: { model.editDayStart($0, now: Date(), place: $1); dismissSheet() },
                            onCancel: dismissSheet)
         case .closeShift:
             TimeEntrySheet(kind: .restStart, initialDate: Date(),
                            check: { model.checkCloseShift(at: $0, now: Date()) },
                            warning: overLimitLine(currentShift: { $0.closeShift(at: $1, now: Date()) }),
-                           onConfirm: { date in
-                               model.closeShift(at: date, now: Date())
+                           country: newEventCountry,
+                           onConfirm: { date, place in
+                               model.closeShift(at: date, now: Date(), place: place)
                                drivingAlertPending = model.isResting
                                dismissSheet()
                            },
@@ -616,7 +624,8 @@ public struct DashboardView: View {
             TimeEntrySheet(kind: .restStart, initialDate: model.dayEnd ?? Date(),
                            check: { model.checkEditDayEnd($0, now: Date()) },
                            warning: overLimitLine(currentShift: { $0.editDayEnd($1, now: Date()) }),
-                           onConfirm: { model.editDayEnd($0, now: Date()); dismissSheet() },
+                           country: editCountry(model.dayEndPlace),
+                           onConfirm: { model.editDayEnd($0, now: Date(), place: $1); dismissSheet() },
                            onCancel: dismissSheet)
         case .driving:
             DailyDrivingSheet(initialMinutes: model.drivingMinutes,
@@ -650,6 +659,17 @@ public struct DashboardView: View {
             ViolationSheet(model: model, key: ViolationKey(periodID: model.dutyID, kind: .dutyLimit), style: .home,
                            onClose: dismissSheet)
         }
+    }
+
+    /// Start and Close: found from the location, the last country meanwhile; required (decision 2, 13.11.2026).
+    private var newEventCountry: CountryEntry {
+        CountryEntry(initial: .newEvent(lastPlace: model.lastPlace), recents: model.recentCountries(),
+                     locator: locator, required: true)
+    }
+
+    /// Editing a start or close: the stored country, changeable; older records may stay without one.
+    private func editCountry(_ place: ShiftPlace?) -> CountryEntry {
+        CountryEntry(initial: .editing(place), recents: model.recentCountries(), locator: nil, required: false)
     }
 
     /// Decision 14: the red line when the entered time would push the current shift past its limit.

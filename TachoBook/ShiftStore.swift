@@ -59,9 +59,70 @@ enum ShiftSchemaV2: VersionedSchema {
     }
 }
 
+/// V3 adds the country (and Spanish region) at each shift start and close. The four new columns are
+/// optional, so older records open as "not recorded" through a lightweight migration.
+enum ShiftSchemaV3: VersionedSchema {
+    static var versionIdentifier: Schema.Version { .init(3, 0, 0) }
+    static var models: [any PersistentModel.Type] { [Period.self, ShiftSchemaV2.Printout.self] }
+
+    @Model
+    final class Period {
+        @Attribute(.unique) var id: UUID
+        var calendarZone: String
+        var date: Date
+        var start: Date?
+        var drivingMinutes: Int?
+        var end: Date?
+        var isClosed: Bool
+        var isCurrent: Bool
+        var archiveOrder: Int
+        var restData: Data
+        /// Tachograph nation code and Spanish region code at the start and the close.
+        var startCountry: String?
+        var startRegion: String?
+        var endCountry: String?
+        var endRegion: String?
+
+        init(period: DutyPeriod, isCurrent: Bool, archiveOrder: Int, restData: Data) {
+            id = period.id
+            calendarZone = period.calendarZone
+            date = period.date
+            start = period.start
+            drivingMinutes = period.drivingMinutes
+            end = period.end
+            isClosed = period.isClosed
+            self.isCurrent = isCurrent
+            self.archiveOrder = archiveOrder
+            self.restData = restData
+            setPlaces(of: period)
+        }
+
+        func setPlaces(of period: DutyPeriod) {
+            startCountry = period.startPlace?.country
+            startRegion = period.startPlace?.region
+            endCountry = period.endPlace?.country
+            endRegion = period.endPlace?.region
+        }
+
+        func value() throws -> DutyPeriod {
+            DutyPeriod(id: id, calendarZone: calendarZone, date: date, start: start,
+                       drivingMinutes: drivingMinutes, end: end, isClosed: isClosed,
+                       rests: try JSONDecoder().decode([RestSegment].self, from: restData),
+                       startPlace: startCountry.map { ShiftPlace(country: $0, region: startRegion) },
+                       endPlace: endCountry.map { ShiftPlace(country: $0, region: endRegion) })
+        }
+    }
+}
+
+/// The shift record type of the current schema.
+typealias PeriodRecord = ShiftSchemaV3.Period
+
 enum ShiftMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [ShiftSchemaV1.self, ShiftSchemaV2.self] }
-    static var stages: [MigrationStage] { [.lightweight(fromVersion: ShiftSchemaV1.self, toVersion: ShiftSchemaV2.self)] }
+    static var schemas: [any VersionedSchema.Type] { [ShiftSchemaV1.self, ShiftSchemaV2.self, ShiftSchemaV3.self] }
+    static var stages: [MigrationStage] {
+        [.lightweight(fromVersion: ShiftSchemaV1.self, toVersion: ShiftSchemaV2.self),
+         .lightweight(fromVersion: ShiftSchemaV2.self, toVersion: ShiftSchemaV3.self)]
+    }
 }
 
 enum ShiftStoreError: LocalizedError {
@@ -79,7 +140,7 @@ final class ShiftStore {
 
     init(url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let schema = Schema(versionedSchema: ShiftSchemaV2.self)
+        let schema = Schema(versionedSchema: ShiftSchemaV3.self)
         let configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
         container = try ModelContainer(for: schema, migrationPlan: ShiftMigrationPlan.self, configurations: [configuration])
         context = ModelContext(container)
@@ -87,7 +148,7 @@ final class ShiftStore {
     }
 
     func load(legacyURL: URL?) throws -> ShiftJournal? {
-        let records = try context.fetch(FetchDescriptor<ShiftSchemaV1.Period>(sortBy: [SortDescriptor(\.archiveOrder)]))
+        let records = try context.fetch(FetchDescriptor<PeriodRecord>(sortBy: [SortDescriptor(\.archiveOrder)]))
         if records.isEmpty {
             guard let legacyURL, FileManager.default.fileExists(atPath: legacyURL.path) else { return nil }
             let journal = try JSONDecoder().decode(ShiftJournal.self, from: Data(contentsOf: legacyURL))
@@ -113,10 +174,10 @@ final class ShiftStore {
         // a partially changed journal. Save all command changes in one transaction.
         let encoded = try periods.map { try JSONEncoder().encode($0.rests) }
         do {
-            let records = try context.fetch(FetchDescriptor<ShiftSchemaV1.Period>())
+            let records = try context.fetch(FetchDescriptor<PeriodRecord>())
             let byID = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
             for (index, period) in periods.enumerated() {
-                let record = byID[period.id] ?? ShiftSchemaV1.Period(
+                let record = byID[period.id] ?? PeriodRecord(
                     period: period, isCurrent: period.id == journal.current.id,
                     archiveOrder: index, restData: encoded[index])
                 if byID[period.id] == nil { context.insert(record) }
@@ -129,6 +190,7 @@ final class ShiftStore {
                 record.isCurrent = period.id == journal.current.id
                 record.archiveOrder = index
                 record.restData = encoded[index]
+                record.setPlaces(of: period)
             }
             let ids = Set(periods.map(\.id))
             for record in records where !ids.contains(record.id) { context.delete(record) }

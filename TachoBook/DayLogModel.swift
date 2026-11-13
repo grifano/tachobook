@@ -30,6 +30,8 @@ public final class DayLogModel {
     public var isShiftOpen: Bool { dayStart != nil && !isResting }
     public var restKind: RestKind { restSegments.last?.kind ?? .daily }
     public var currentRestStart: Date? { isResting ? restSegments.last?.start : nil }
+    public var dayStartPlace: ShiftPlace? { state.current.startPlace }
+    public var dayEndPlace: ShiftPlace? { state.current.endPlace }
 
     /// Tests/previews are in-memory unless a disk store URL is explicitly supplied.
     /// A failed disk store is locked, never replaced with an in-memory fallback.
@@ -148,7 +150,8 @@ public final class DayLogModel {
             calendar.date(from: DateComponents(year: 2026, month: 10, day: 17, hour: hour, minute: minute))
         }
         guard let start = date(5, 40), let restStart = date(8, 34) else { return }
-        seedWeeklyRestIfEmpty(shiftStart: start, restStart: restStart, drivingMinutes: 128)
+        seedWeeklyRestIfEmpty(shiftStart: start, restStart: restStart, drivingMinutes: 128,
+                              startPlace: ShiftPlace(country: "F"), endPlace: ShiftPlace(country: "E", region: "PV"))
     }
 
     /// An archived (past) shift with an empty current record, for UI tests of overlap and cover cases.
@@ -235,12 +238,14 @@ public final class DayLogModel {
         }
     }
 
-    public func seedWeeklyRestIfEmpty(shiftStart: Date, restStart: Date, drivingMinutes: Int) {
+    public func seedWeeklyRestIfEmpty(shiftStart: Date, restStart: Date, drivingMinutes: Int,
+                                      startPlace: ShiftPlace? = nil, endPlace: ShiftPlace? = nil) {
         guard isEmpty, shiftStart <= restStart else { return }
         update { journal in
             journal.current = DutyPeriod(date: shiftStart, start: shiftStart, drivingMinutes: drivingMinutes,
                                          end: restStart, isClosed: true,
-                                         rests: [RestSegment(start: restStart, kind: .weekly)])
+                                         rests: [RestSegment(start: restStart, kind: .weekly)],
+                                         startPlace: startPlace, endPlace: endPlace)
         }
     }
     #endif
@@ -308,12 +313,13 @@ public final class DayLogModel {
         update { journal in
             journal.current.rests[journal.current.rests.count - 1].end = date
             journal.current.end = nil
+            journal.current.endPlace = nil
             journal.current.isClosed = false
         }
     }
 
     /// Qualification is an explicit external decision, never inferred from a timer.
-    public func startNewShift(at date: Date, dailyRestConfirmed: Bool) {
+    public func startNewShift(at date: Date, dailyRestConfirmed: Bool, place: ShiftPlace? = nil) {
         guard dailyRestConfirmed, isResting, let rest = restSegments.last,
               date.timeIntervalSince(rest.start) >= Double(restKind.requiredHours) * 3600 else { return }
         update { journal in
@@ -321,7 +327,7 @@ public final class DayLogModel {
             journal.current.rests[journal.current.rests.count - 1].dailyRestConfirmed = true
             journal.history.append(journal.current)
             journal.history.sortChronologically()
-            journal.current = DutyPeriod(date: date, start: date)
+            journal.current = DutyPeriod(date: date, start: date, startPlace: place)
         }
     }
 
@@ -422,9 +428,13 @@ public final class DayLogModel {
         return String(format: "%dh%02d", h, m)
     }
 
-    public func setDayStart(_ date: Date) {
+    public func setDayStart(_ date: Date, place: ShiftPlace? = nil) {
         guard !isResting, restSegments.isEmpty, dayEnd.map({ date <= $0 }) ?? true else { return }
-        update { $0.current.start = date; $0.current.date = date }
+        update { journal in
+            journal.current.start = date
+            journal.current.date = date
+            if let place { journal.current.startPlace = place }
+        }
     }
 
     public func setDrivingMinutes(_ minutes: Int) {
@@ -432,22 +442,24 @@ public final class DayLogModel {
         update { $0.current.drivingMinutes = minutes }
     }
 
-    public func setDayEnd(_ date: Date) {
+    public func setDayEnd(_ date: Date, place: ShiftPlace? = nil) {
         guard let start = dayStart, date >= start,
               restSegments.last(where: { $0.end != nil })?.end.map({ date >= $0 }) ?? true else { return }
         update { journal in
             journal.current.end = date
+            if let place { journal.current.endPlace = place }
             if isResting {
                 journal.current.rests[journal.current.rests.count - 1].start = date
             }
         }
     }
 
-    public func closeShift(at date: Date) {
+    public func closeShift(at date: Date, place: ShiftPlace? = nil) {
         guard let start = dayStart, !isResting, date >= start,
               restSegments.last(where: { $0.end != nil })?.end.map({ date >= $0 }) ?? true else { return }
         update { journal in
             journal.current.end = date
+            journal.current.endPlace = place
             journal.current.isClosed = true
             // Every rest started by closing a shift in the app is daily.
             journal.current.rests.append(RestSegment(start: date, kind: .daily))
@@ -478,12 +490,13 @@ public final class DayLogModel {
         return previousRest?.end.map { date >= $0 } ?? true ? nil : .other
     }
 
-    public func startShift(at date: Date, now: Date) {
-        guard canStartShift(at: date, now: now) else { return }
+    /// `place` is where the driver is; the sheet requires it, previews and older callers may leave it out.
+    public func startShift(at date: Date, now: Date, place: ShiftPlace? = nil) {
+        guard canStartShift(at: date, now: now), place?.isComplete ?? true else { return }
         if isResting {
-            startNewShift(at: date, dailyRestConfirmed: true)
+            startNewShift(at: date, dailyRestConfirmed: true, place: place)
         } else {
-            setDayStart(date)
+            setDayStart(date, place: place)
         }
     }
 
@@ -497,9 +510,9 @@ public final class DayLogModel {
         return (lastClosedRestEnd.map { date >= $0 } ?? true) ? nil : .other
     }
 
-    public func closeShift(at date: Date, now: Date) {
-        guard canCloseShift(at: date, now: now) else { return }
-        closeShift(at: date)
+    public func closeShift(at date: Date, now: Date, place: ShiftPlace? = nil) {
+        guard canCloseShift(at: date, now: now), place?.isComplete ?? true else { return }
+        closeShift(at: date, place: place)
     }
 
     /// Editing Day started keeps the previous rest linked to it when they share the instant.
@@ -520,12 +533,14 @@ public final class DayLogModel {
         return nil
     }
 
-    public func editDayStart(_ date: Date, now: Date) {
-        guard canEditDayStart(date, now: now), let current = dayStart else { return }
+    /// `place` replaces the start country; nil keeps the stored one.
+    public func editDayStart(_ date: Date, now: Date, place: ShiftPlace? = nil) {
+        guard canEditDayStart(date, now: now), let current = dayStart, place?.isComplete ?? true else { return }
         let linked = previousRest?.end == current
         update { journal in
             journal.current.start = date
             journal.current.date = date
+            if let place { journal.current.startPlace = place }
             if linked, let last = journal.history.indices.last, !journal.history[last].rests.isEmpty {
                 journal.history[last].rests[journal.history[last].rests.count - 1].end = date
             }
@@ -546,9 +561,33 @@ public final class DayLogModel {
         return nil
     }
 
-    public func editDayEnd(_ date: Date, now: Date) {
-        guard canEditDayEnd(date, now: now) else { return }
-        setDayEnd(date)
+    /// `place` replaces the close country; nil keeps the stored one.
+    public func editDayEnd(_ date: Date, now: Date, place: ShiftPlace? = nil) {
+        guard canEditDayEnd(date, now: now), place?.isComplete ?? true else { return }
+        setDayEnd(date, place: place)
+    }
+
+    // MARK: - Country (start and close)
+
+    /// Every recorded country with the instant it was recorded, newest first.
+    private var placesNewestFirst: [ShiftPlace] {
+        (state.history + [state.current])
+            .flatMap { period in
+                [period.start.flatMap { date in period.startPlace.map { (date, $0) } },
+                 period.end.flatMap { date in period.endPlace.map { (date, $0) } }].compactMap { $0 }
+            }
+            .sorted { $0.0 > $1.0 }
+            .map(\.1)
+    }
+
+    /// The country recorded last, with its Spanish region: the guess when the location is unknown.
+    public var lastPlace: ShiftPlace? { placesNewestFirst.first }
+
+    /// Up to `limit` different countries, most recently recorded first (decision 5, 13.11.2026).
+    public func recentCountries(limit: Int = 4) -> [TachoCountry] {
+        var seen = Set<String>()
+        return placesNewestFirst.compactMap { place in seen.insert(place.country).inserted ? place.tachoCountry : nil }
+            .prefix(limit).map { $0 }
     }
 
     public func closeDay() {
@@ -565,9 +604,11 @@ public final class DayLogModel {
         guard restSegments.isEmpty || type == .driving else { return }
         update { journal in
             switch type {
-            case .dayStart: journal.current.start = nil; journal.current.end = nil
+            case .dayStart:
+                journal.current.start = nil; journal.current.end = nil
+                journal.current.startPlace = nil; journal.current.endPlace = nil
             case .driving: journal.current.drivingMinutes = nil
-            case .dayEnd: journal.current.end = nil
+            case .dayEnd: journal.current.end = nil; journal.current.endPlace = nil
             }
             if journal.current.rests.isEmpty { journal.current.isClosed = false }
         }

@@ -44,7 +44,7 @@ struct ShiftPersistenceTests {
                 }
             }
             let store = try ShiftStore(url: url)
-            #expect(try ModelContext(store.container).fetchCount(FetchDescriptor<ShiftSchemaV1.Period>()) == 1)
+            #expect(try ModelContext(store.container).fetchCount(FetchDescriptor<PeriodRecord>()) == 1)
             #expect(FileManager.default.fileExists(atPath: url.path))
         }
     }
@@ -119,7 +119,7 @@ struct ShiftPersistenceTests {
                 #expect(model.archivedPeriods.map(\.id) == ids)
             }
             let store = try ShiftStore(url: url)
-            #expect(try ModelContext(store.container).fetchCount(FetchDescriptor<ShiftSchemaV1.Period>()) == 4)
+            #expect(try ModelContext(store.container).fetchCount(FetchDescriptor<PeriodRecord>()) == 4)
         }
     }
 
