@@ -77,7 +77,7 @@ struct DayHistoryTests {
             #expect(model.storageError == nil)
         }
         let store = try ShiftStore(url: url)
-        #expect(try ModelContext(store.container).fetchCount(FetchDescriptor<ShiftSchemaV1.Period>()) == 0)
+        #expect(try ModelContext(store.container).fetchCount(FetchDescriptor<PeriodRecord>()) == 0)
     }
 
     // MARK: - Entering and editing

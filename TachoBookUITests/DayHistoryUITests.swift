@@ -218,10 +218,14 @@ final class DayHistoryUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["homeGauge"].label.hasSuffix("?"), app.descendants(matching: .any)["homeGauge"].label)
         attach("Empty day, Work tab")
 
+        // A time replaces the "?"; the country line under it stays "?" because none was chosen.
+        let time = #"\b\d{2}:\d{2}\b"#
         enterTime(app, from: "summaryDayStarted", screenshot: nil)
-        XCTAssertFalse(app.buttons["summaryDayStarted"].label.contains("?"))
+        XCTAssertNotNil(app.buttons["summaryDayStarted"].label.range(of: time, options: .regularExpression),
+                        app.buttons["summaryDayStarted"].label)
         enterTime(app, from: "summaryDayClosed", screenshot: nil)
-        XCTAssertFalse(app.buttons["summaryDayClosed"].label.contains("?"))
+        XCTAssertNotNil(app.buttons["summaryDayClosed"].label.range(of: time, options: .regularExpression),
+                        app.buttons["summaryDayClosed"].label)
         enterDriving(app, digits: ["9", "5", "2"], expect: "Driving time 9h52")
         XCTAssertTrue(app.buttons["summaryDriving"].label.contains("09h52m"))
         XCTAssertFalse(app.descendants(matching: .any)["homeGauge"].label.hasSuffix("?"))
@@ -264,8 +268,10 @@ final class DayHistoryUITests: XCTestCase {
         relaunched.swipeRight()
         XCTAssertTrue(relaunched.buttons["todayButton"].waitForExistence(timeout: 5))
         XCTAssertTrue(relaunched.buttons["summaryDriving"].label.contains("01h23m"))
-        XCTAssertFalse(relaunched.buttons["summaryDayStarted"].label.contains("?"))
-        XCTAssertFalse(relaunched.buttons["summaryDayClosed"].label.contains("?"))
+        for id in ["summaryDayStarted", "summaryDayClosed"] {
+            XCTAssertNotNil(relaunched.buttons[id].label.range(of: time, options: .regularExpression),
+                            relaunched.buttons[id].label)
+        }
     }
 
     /// F4 (the owner's case): a stored shift covers yesterday, so the default start overlaps it.

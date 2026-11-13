@@ -39,6 +39,10 @@ public struct DutyPeriod: Codable, Identifiable {
     public var end: Date?
     public var isClosed = false
     public var rests: [RestSegment] = []
+    /// Country (and Spanish region) at the shift start; nil in records made before it was asked.
+    public var startPlace: ShiftPlace? = nil
+    /// Country (and Spanish region) at the shift close; nil while open or in older records.
+    public var endPlace: ShiftPlace? = nil
 }
 
 struct ShiftJournal: Codable {

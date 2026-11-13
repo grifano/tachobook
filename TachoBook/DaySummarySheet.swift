@@ -133,6 +133,8 @@ struct DaySummary {
         var symbol: String
         var label: String
         var value: String
+        /// The country under a start or close time, as on Home ("🇭🇺 H", "?").
+        var detail: ShiftPlaceLine? = nil
         var identifier: String
         var id: String { identifier }
     }
@@ -197,12 +199,14 @@ struct DaySummary {
         times = [
             Time(symbol: "play.circle", label: "Day started",
                  value: record?.start.map { HomeTimeline.clockLabel($0, relativeTo: day, calendar: calendar) } ?? "?",
+                 detail: ShiftPlaceLine(place: record?.startPlace, recordedAt: record?.start),
                  identifier: "daySummaryStarted"),
             Time(symbol: "steeringwheel", label: "Driving",
                  value: HomeTimeline.drivingLabel(minutes: record?.drivingMinutes),
                  identifier: "daySummaryDriving"),
             Time(symbol: "stop.circle", label: "Day closed",
                  value: record?.end.map { HomeTimeline.clockLabel($0, relativeTo: day, calendar: calendar) } ?? "?",
+                 detail: ShiftPlaceLine(place: record?.endPlace, recordedAt: record?.end),
                  identifier: "daySummaryClosed"),
         ]
     }
@@ -215,13 +219,14 @@ private struct DayTimesRow: View {
 
     var body: some View {
         let stacked = dynamicTypeSize.isAccessibilitySize
-        let layout = stacked ? AnyLayout(VStackLayout(spacing: 16)) : AnyLayout(HStackLayout(spacing: 20))
+        // Top-aligned like Home's summary, so Driving (no country line) starts level with the others.
+        let layout = stacked ? AnyLayout(VStackLayout(spacing: 16)) : AnyLayout(HStackLayout(alignment: .top, spacing: 20))
         layout {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 if index > 0 && !stacked {
                     FadedRule(axis: .vertical).frame(width: 1, height: 44)
                 }
-                HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value)
+                HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value, detail: item.detail)
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier(item.identifier)
             }

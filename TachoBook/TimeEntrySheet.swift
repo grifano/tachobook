@@ -54,28 +54,47 @@ public struct TimeEntrySheet: View {
     var check: (Date) -> TimeEntryIssue?
     /// A red line when a valid time pushes the shift past its limit (decision 14); Confirm stays enabled.
     var warning: (Date) -> String?
-    var onConfirm: (Date) -> Void
+    var onConfirm: (Date, ShiftPlace?) -> Void
     var onCancel: () -> Void
+    /// The country row of «Flow - Country selection»; nil for sheets without a country.
+    var country: CountryEntry?
 
     @State private var date: Date
+    @State private var place: CountrySelection
 
     public init(kind: Kind, initialDate: Date, range: ClosedRange<Date>? = nil, check: @escaping (Date) -> TimeEntryIssue?,
                 warning: @escaping (Date) -> String? = { _ in nil },
                 onConfirm: @escaping (Date) -> Void, onCancel: @escaping () -> Void) {
+        self.init(kind: kind, initialDate: initialDate, range: range, check: check, warning: warning, country: nil,
+                  onConfirm: { date, _ in onConfirm(date) }, onCancel: onCancel)
+    }
+
+    /// A sheet that also records where the driver is. `onConfirm` gets the chosen place (nil only for an
+    /// edit of an older record left without a country).
+    init(kind: Kind, initialDate: Date, range: ClosedRange<Date>? = nil, check: @escaping (Date) -> TimeEntryIssue?,
+         warning: @escaping (Date) -> String? = { _ in nil }, country: CountryEntry?,
+         onConfirm: @escaping (Date, ShiftPlace?) -> Void, onCancel: @escaping () -> Void) {
         self.kind = kind
         self.range = range
         self.check = check
         self.warning = warning
+        self.country = country
         self.onConfirm = onConfirm
         self.onCancel = onCancel
         _date = State(initialValue: initialDate)
+        _place = State(initialValue: country?.initial ?? CountrySelection(place: nil, source: .none))
+    }
+
+    private var canConfirm: Bool {
+        check(date) == nil && (country.map { place.canConfirm(required: $0.required) } ?? true)
     }
 
     public var body: some View {
         VStack(spacing: 0) {
-            SheetToolbar(title: kind.title, subtitle: kind.subtitle, canConfirm: check(date) == nil,
-                         onCancel: onCancel, onConfirm: { onConfirm(date) })
-            VStack(spacing: 16) {
+            SheetToolbar(title: kind.title, subtitle: kind.subtitle, canConfirm: canConfirm,
+                         onCancel: onCancel, onConfirm: { onConfirm(date, country == nil ? nil : place.place) })
+            // Figma «Sheet Content» with the country row uses 12 pt gaps.
+            VStack(spacing: country == nil ? 16 : 12) {
                 if let icon = kind.icon {
                     SheetSymbol(image: icon, height: kind.iconHeight)
                 }
@@ -83,6 +102,9 @@ public struct TimeEntrySheet: View {
                     .datePickerStyle(.compact)
                     .labelsHidden()
                     .accessibilityIdentifier("sheetDatePicker")
+                if let country {
+                    CountryField(selection: $place, recents: country.recents)
+                }
                 // Why Confirm is disabled; sits below the picker so the picker never moves.
                 // The F4 reason takes precedence: the red line shows only for a time that can be confirmed.
                 let issue = check(date)
@@ -116,7 +138,13 @@ public struct TimeEntrySheet: View {
         }
         .foregroundStyle(Color.tachoTextOnLight)
         .environment(\.colorScheme, .light)
-        .presentationDetents([.height(387)])
+        .task {
+            // Location runs after the sheet is up and never blocks Confirm (decision 2, 13.11.2026).
+            guard let locator = country?.locator else { return }
+            let detected = await locator.locate()
+            withAnimation { place.apply(detected: detected) }
+        }
+        .presentationDetents([.height(country == nil ? 387 : 459)])
         .presentationDragIndicator(.hidden)
         .presentationBackground {
             Rectangle().fill(Color(red: 245/255, green: 245/255, blue: 245/255).opacity(0.94))
@@ -132,6 +160,16 @@ extension TimeEntrySheet {
             DatePicker(kind.title, selection: $date, displayedComponents: [.date, .hourAndMinute])
         }
     }
+}
+
+/// What a time sheet needs to show the country row.
+struct CountryEntry {
+    var initial: CountrySelection
+    var recents: [TachoCountry]
+    /// Looks the country up for a new Start or Close; nil for edits.
+    var locator: CountryLocator?
+    /// A new Start or Close cannot be saved without a country.
+    var required: Bool
 }
 
 /// Figma "Toolbar - Top - Sheet": orange grabber, close and confirm buttons, centred titles.

@@ -194,9 +194,30 @@ struct HomeSummaryItem: Identifiable {
     var symbol: String
     var label: String
     var value: String
+    /// A line under the value: the country of a start or close ("🇫🇷 F").
+    var detail: ShiftPlaceLine? = nil
     var identifier: String
     var action: () -> Void
     var id: String { identifier }
+}
+
+/// The country line under a start or close time (Figma «Country 6»: "🇫🇷 F", "🇪🇸 E·PV");
+/// "?" when the time exists but no country was recorded.
+struct ShiftPlaceLine {
+    /// nil when not recorded.
+    var country: TachoCountry?
+    /// "F", "E·PV" or "?".
+    var text: String
+
+    init?(place: ShiftPlace?, recordedAt time: Date?) {
+        guard time != nil else { return nil }
+        country = place?.tachoCountry
+        if let country {
+            text = place?.codeLabel ?? country.code
+        } else {
+            text = "?"
+        }
+    }
 }
 
 /// Figma "Secondary Widget": a titled card with two or three centred values.
@@ -216,8 +237,10 @@ struct HomeSecondaryCard<Item: View>: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.tachoTextOnLight)
                 .accessibilityAddTraits(.isHeader)
+            // Top-aligned: a column without a country line (Driving) starts level with the others. Centred, it
+            // sits lower in the taller summary and fails the contrast audit on iOS 27.2 (13.11.2026).
             let layout = dynamicTypeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(spacing: 16)) : AnyLayout(HStackLayout(spacing: 20))
+                ? AnyLayout(VStackLayout(spacing: 16)) : AnyLayout(HStackLayout(alignment: .top, spacing: 20))
             layout { columns(rules: !dynamicTypeSize.isAccessibilitySize) }
             .frame(maxWidth: .infinity)
             if let footer {
@@ -248,6 +271,7 @@ struct HomeValueColumn: View {
     var label: String
     var value: String
     var valueSymbol: String?
+    var detail: ShiftPlaceLine? = nil
 
     var body: some View {
         VStack(spacing: 4) {
@@ -268,6 +292,17 @@ struct HomeValueColumn: View {
                     .fontWeight(value == "?" ? .heavy : nil)
             }
             .font(.headline)
+            if let detail {
+                // Figma «Country 6»: the country on its own line under the time.
+                HStack(spacing: 4) {
+                    if let country = detail.country {
+                        FlagImage(country: country)
+                    }
+                    Text(detail.text)
+                        .fontWeight(detail.text == "?" ? .heavy : nil)
+                }
+                .font(.headline)
+            }
         }
         .foregroundStyle(Color.tachoTextOnLight)
         .multilineTextAlignment(.center)
