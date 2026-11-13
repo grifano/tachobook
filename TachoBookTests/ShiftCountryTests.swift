@@ -210,6 +210,24 @@ struct ShiftCountryModelTests {
         #expect(model.recentCountries().map(\.code) == ["S", "D", "PL"])
     }
 
+    /// History's day summary shows each shift's own countries, as Home does today; a shift recorded before
+    /// countries shows "?" (Serhii, 13.11.2026).
+    @Test func historyDaySummaryShowsTheShiftsCountries() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let model = DayLogModel(date: start)
+        model.startShift(at: start, now: now, place: ShiftPlace(country: "H"))
+        model.closeShift(at: start.addingTimeInterval(9 * 3600), now: now, place: ShiftPlace(country: "E", region: "PV"))
+        let next = start.addingTimeInterval(24 * 3600)
+        model.startShift(at: next, now: now) // no country, like a shift saved before this feature
+
+        let past = DaySummary(model: model, day: start, now: now, calendar: calendar)
+        #expect(past.times.map { $0.detail?.text } == ["H", nil, "E·PV"])
+        #expect(past.times.map { $0.detail?.country?.code } == ["H", nil, "E"])
+        let today = DaySummary(model: model, day: next, now: now, calendar: calendar)
+        #expect(today.times.map { $0.detail?.text } == ["?", nil, nil], "no close yet, so no line under it")
+    }
+
     @Test func recentCountriesAreFourDifferentNewestFirst() {
         let model = DayLogModel(date: start)
         let codes = ["PL", "D", "PL", "S", "E", "F"]

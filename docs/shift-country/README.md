@@ -26,6 +26,11 @@ The 390 pt set is the current one. The 402 pt set was taken before the summary c
 | 7 edit start of an old shift | ![](390-7-edit-start.jpg) | ![](402-7-edit-start.jpg) |
 | 8 no location: last country offered | ![](390-8-no-location-last-country.jpg) | ![](402-8-no-location-last-country.jpg) |
 | 9 no location, no history: must choose | ![](390-9-nothing-known.jpg) | ![](402-9-nothing-known.jpg) |
+| 10 History day summary with countries | ![](390-10-history.jpg) | — |
+
+Frame 10 (Serhii, 13.11.2026): History's day summary shows each shift's own countries, as Home does; a shift
+recorded before countries shows "?". It is read-only, like the rest of that sheet. Figma has no frame for it, so it
+reuses the summary's country line.
 
 ## Differences from Figma
 

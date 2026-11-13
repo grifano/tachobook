@@ -58,6 +58,19 @@ final class CountryUITests: XCTestCase {
         let relaunched = launch(["-stubCountry", "PL"], reset: false)
         XCTAssertTrue(relaunched.buttons["summaryDayClosed"].waitForExistence(timeout: 5))
         XCTAssertTrue(summaryLabel(relaunched, "summaryDayClosed").hasSuffix("Germany, D"))
+
+        // History's day summary shows the same countries (Serhii, 13.11.2026).
+        relaunched.tabBars.buttons["History"].tap()
+        let today = Date().formatted(.dateTime.month(.wide).day())
+        let cell = relaunched.buttons.matching(NSPredicate(format: "label CONTAINS %@", today)).firstMatch
+        XCTAssertTrue(cell.waitForExistence(timeout: 5))
+        cell.tap()
+        let started = relaunched.descendants(matching: .any)["daySummaryStarted"]
+        XCTAssertTrue(started.waitForExistence(timeout: 5))
+        XCTAssertTrue(started.label.hasSuffix("Poland, PL"), started.label)
+        let closed = relaunched.descendants(matching: .any)["daySummaryClosed"]
+        XCTAssertTrue(closed.label.hasSuffix("Germany, D"), closed.label)
+        attach("Country 10 history day summary")
     }
 
     /// In Spain the region is required; switching to France clears it.
