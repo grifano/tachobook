@@ -7,17 +7,17 @@
 
 import SwiftUI
 
-/// Figma "Main Tab Bar" (node 490:26372): Home, History, Violations, Restrictions. Home, History and Violations
-/// work; Restrictions is visible, and a tap does nothing. SwiftUI does not expose it to accessibility as disabled
-/// (no "not enabled" trait), which Serhii accepted on 2026-10-20 (option A); the UI tests exclude exactly that audit
-/// issue (see AccessibilityAuditSupport).
-/// SF Symbols as in Figma: house, calendar.badge.clock, exclamationmark.circle.fill, globe.badge.clock.fill.
+/// Figma "Main Tab Bar" (Design v2): Home, History, Violations, Settings. Home, History and Violations work;
+/// Settings has no screen yet: it is visible, and a tap does nothing. SwiftUI does not expose it to accessibility
+/// as disabled (no "not enabled" trait), which Serhii accepted on 2026-10-20 (option A); the UI tests exclude
+/// exactly that audit issue (see AccessibilityAuditSupport).
+/// SF Symbols as in Figma: house, calendar.badge.clock, exclamationmark.circle.fill, gearshape.
 struct ContentView: View {
     enum MainTab: Hashable {
         case home
         case history
         case violations
-        case restrictions
+        case settings
     }
 
     /// One model for every tab, so History and Violations follow every change made on Home.
@@ -51,7 +51,7 @@ struct ContentView: View {
             Tab("Violations", systemImage: "exclamationmark.circle.fill", value: MainTab.violations) {
                 ViolationsView(model: model)
             }
-            Tab("Restrictions", systemImage: "globe.badge.clock.fill", value: MainTab.restrictions) {
+            Tab("Settings", systemImage: "gearshape", value: MainTab.settings) {
                 Color.clear
             }
             .disabled(true)

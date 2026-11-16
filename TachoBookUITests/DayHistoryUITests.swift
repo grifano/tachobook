@@ -130,21 +130,22 @@ final class DayHistoryUITests: XCTestCase {
         XCTAssertFalse(hint.exists)
     }
 
-    /// F7: the native tab bar shows Home selected; History opens the History tab (MVP-07); Violations and
-    /// Restrictions are dimmed and inert.
+    /// F7: the native tab bar shows Home selected; History opens the History tab (MVP-07); Violations is active;
+    /// Settings has no screen yet and is inert. The header has no gear on any tab.
     @MainActor
     func testTabBarHasHomeHistoryAndViolationsActive() {
         let app = launch(reset: true)
         XCTAssertTrue(app.buttons["summaryDayClosed"].waitForExistence(timeout: 5))
         let bar = app.tabBars.firstMatch
         XCTAssertTrue(bar.exists)
-        XCTAssertEqual(bar.buttons.allElementsBoundByIndex.map(\.label), ["Home", "History", "Violations", "Restrictions"])
+        XCTAssertEqual(bar.buttons.allElementsBoundByIndex.map(\.label), ["Home", "History", "Violations", "Settings"])
+        XCTAssertFalse(bar.buttons["Restrictions"].exists, "Restrictions is no longer a tab")
         XCTAssertTrue(bar.buttons["Home"].isSelected)
         attach("Tab bar")
-        XCTAssertTrue(bar.buttons["Restrictions"].exists)
-        bar.buttons["Restrictions"].tap()
-        XCTAssertTrue(bar.buttons["Home"].isSelected, "tapping Restrictions does nothing")
-        XCTAssertFalse(bar.buttons["Restrictions"].isSelected)
+        XCTAssertTrue(bar.buttons["Settings"].exists)
+        bar.buttons["Settings"].tap()
+        XCTAssertTrue(bar.buttons["Home"].isSelected, "tapping Settings does nothing")
+        XCTAssertFalse(bar.buttons["Settings"].isSelected)
         XCTAssertTrue(app.buttons["summaryDayClosed"].exists, "still on Home")
         // Violations is active since the violation counter (07.11.2026).
         bar.buttons["Violations"].tap()
@@ -158,7 +159,7 @@ final class DayHistoryUITests: XCTestCase {
         // On a past day the inert tab stays inert.
         app.swipeRight()
         XCTAssertTrue(app.buttons["todayButton"].waitForExistence(timeout: 5))
-        bar.buttons["Restrictions"].tap()
+        bar.buttons["Settings"].tap()
         XCTAssertTrue(bar.buttons["Home"].isSelected)
         XCTAssertTrue(app.buttons["todayButton"].exists, "still on the past day")
     }
