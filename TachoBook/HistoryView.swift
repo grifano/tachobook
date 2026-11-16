@@ -13,6 +13,8 @@ struct HistoryView: View {
     /// Shows the Violations tab: "Go to rule" on a day with several violations (decision 20).
     var onOpenViolations: () -> Void = {}
     @State private var summaryDay: SummaryDay?
+    /// The Add past shift flow (owner decision 5, 16.11.2026), started from the header with now.
+    @State private var pastShift: PastShiftRequest?
 
     struct SummaryDay: Identifiable {
         var date: Date
@@ -24,7 +26,12 @@ struct HistoryView: View {
             let now = context.date
             VStack(spacing: 0) {
                 // Header as on Home, without the week strip (that is for swiping back on Home only).
-                DashboardHeaderView(date: now, today: now, showsDateStrip: false)
+                DashboardHeaderView(date: now, today: now, showsDateStrip: false,
+                                    trailingAction: HeaderAction(title: "Add", systemImage: "calendar.badge.plus",
+                                                                 accessibilityLabel: "Add past shift",
+                                                                 identifier: "addPastShiftButton") {
+                                        pastShift = PastShiftRequest()
+                                    })
                 ScrollView {
                     calendarCard(now: now)
                         .padding(.horizontal, 16)
@@ -42,6 +49,7 @@ struct HistoryView: View {
                                 onOpenViolations()
                             })
         }
+        .pastShiftFlow($pastShift, model: model)
     }
 
     private func calendarCard(now: Date) -> some View {

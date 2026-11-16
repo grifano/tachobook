@@ -91,6 +91,84 @@ final class HistoryUITests: XCTestCase {
         XCTAssertFalse(app.buttons["closeSheetButton"].waitForExistence(timeout: 2))
     }
 
+    // MARK: - Add past shift (owner decision 5, 16.11.2026)
+
+    /// The Add button is on History only, reads "Add past shift" to VoiceOver and starts the normal Shift start sheet.
+    @MainActor
+    func testAddPastShiftButtonIsOnHistoryOnlyAndStartsTheShiftStartSheet() throws {
+        let app = launchOnHistory()
+        let add = app.buttons["addPastShiftButton"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        XCTAssertEqual(add.label, "Add past shift")
+        try audit(app, "History with Add")
+
+        add.tap()
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["When did your shift begin?"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["sheetDatePicker"].exists)
+        attach("Add past shift - start sheet")
+        app.buttons["closeSheetButton"].tap()
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForNonExistence(timeout: 5))
+
+        for tab in ["Home", "Violations"] {
+            app.tabBars.buttons[tab].tap()
+            XCTAssertFalse(app.buttons["addPastShiftButton"].waitForExistence(timeout: 2), "no Add on \(tab)")
+        }
+    }
+
+    /// Start → close → driving saves one shift; a second entry on the same day asks to replace it, and Cancel keeps
+    /// the sheet open.
+    @MainActor
+    func testAddPastShiftRunsTheNormalFlowAndAsksBeforeReplacing() throws {
+        let app = launchOnHistory()
+        let add = app.buttons["addPastShiftButton"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        let confirm = app.buttons["confirmSheetButton"]
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForExistence(timeout: 5))
+        // The seeded shifts have no country and a past date is never filled from the location: the driver picks it.
+        XCTAssertFalse(confirm.isEnabled)
+        app.buttons["countryPicker"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("Pol")
+        let poland = app.buttons["countryRow-PL"]
+        XCTAssertTrue(poland.waitForExistence(timeout: 5))
+        poland.tap()
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirm.isEnabled)
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["Rest start"].waitForExistence(timeout: 5))
+        attach("Add past shift - close sheet")
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["Driving time"].waitForExistence(timeout: 5))
+        for digit in ["1", "3", "0"] { app.buttons[digit].tap() }
+        XCTAssertEqual(app.staticTexts["drivingValue"].label, "Driving time 1h30")
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["Driving time"].waitForNonExistence(timeout: 5))
+
+        // Today now has the new shift.
+        dayCell(app, daysBack: 0).tap()
+        XCTAssertTrue(app.staticTexts["Day summary"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["daySummaryDriving"].label.contains("1h30m"))
+        app.buttons["closeSheetButton"].tap()
+        XCTAssertTrue(app.staticTexts["Day summary"].waitForNonExistence(timeout: 5))
+
+        // The same day again: one shift per day, so it asks first.
+        add.tap()
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForExistence(timeout: 5))
+        confirm.tap()
+        let alert = app.alerts["Replace your shift?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        attach("Add past shift - replace alert")
+        alert.buttons["Cancel"].tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Shift start"].exists, "Cancel returns to the sheet")
+        app.buttons["closeSheetButton"].tap()
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForNonExistence(timeout: 5))
+    }
+
     // MARK: - Helpers
 
     @MainActor
