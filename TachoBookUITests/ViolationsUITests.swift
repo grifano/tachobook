@@ -253,7 +253,7 @@ final class ViolationsUITests: XCTestCase {
     private func audit(_ app: XCUIApplication, _ state: String) throws {
         var issues: [String] = []
         try app.performAccessibilityAudit { issue in
-            // Temporary, see AccessibilityAuditSupport: the dimmed Restrictions tab lacks the "not enabled" trait.
+            // Temporary, see AccessibilityAuditSupport: the dimmed Settings tab lacks the "not enabled" trait.
             if issue.isNotEnabledTraitOnADisabledTab { return true }
             // The native calendar's own day numbers, see AccessibilityAuditSupport.
             if issue.isNativeCalendarDayNumber { return true }

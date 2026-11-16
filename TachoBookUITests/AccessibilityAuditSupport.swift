@@ -3,18 +3,18 @@ import XCTest
 extension XCUIAccessibilityAuditIssue {
     /// TEMPORARY exclusion (Serhii, 2026-10-20, F7 option A).
     ///
-    /// The native tab bar dims the disabled tab Restrictions, but SwiftUI does not give it the accessibility
+    /// The native tab bar dims the disabled tab Settings, but SwiftUI does not give it the accessibility
     /// "not enabled" trait, so the audit reports "Missing trait: UIAccessibilityTraitNotEnabled" for exactly that
     /// tab button. Only that issue, for only that button, is ignored. Every other audit issue still fails the test.
     /// History (25.10.2026) and Violations (violation counter, 07.11.2026) are active tabs and no longer excluded.
     ///
-    /// REMOVE this exclusion (and its call sites in the audit helpers) when Restrictions becomes an active tab.
+    /// REMOVE this exclusion (and its call sites in the audit helpers) when Settings becomes an active tab.
     var isNotEnabledTraitOnADisabledTab: Bool {
         guard auditType == .trait,
               compactDescription.contains("UIAccessibilityTraitNotEnabled"),
               let element,
               element.elementType == .button,
-              element.label == "Restrictions" else { return false }
+              element.label == "Settings" else { return false }
         return true
     }
 }

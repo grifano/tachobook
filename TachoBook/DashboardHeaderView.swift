@@ -6,7 +6,8 @@
 import SwiftUI
 
 /// Figma "Main Top Header": the viewed weekday and date with the week strip. After swiping back
-/// a Today button joins the settings icon (not in Figma; a solid dark capsule so its text keeps contrast).
+/// a Today button appears at the trailing edge (not in Figma; a solid dark capsule so its text keeps contrast).
+/// The trailing slot is reserved for per-tab actions.
 public struct DashboardHeaderView: View {
     /// The day shown (today, or an earlier day after swiping back).
     public var date: Date
@@ -66,15 +67,6 @@ public struct DashboardHeaderView: View {
                     .accessibilityIdentifier("todayButton")
                     .transition(.opacity)
                 }
-
-                // Settings has no destination yet; shown as in Figma without navigation.
-                Image(systemName: "gear")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(Color.tachoTextOnDark)
-                    .frame(width: 44, height: 44)
-                    .glassEffect(.regular.tint(Color.tachoBlue.opacity(0.5)), in: Circle())
-                    .environment(\.colorScheme, .dark)
-                    .accessibilityHidden(true)
             }
             .padding(.horizontal, 16)
 
