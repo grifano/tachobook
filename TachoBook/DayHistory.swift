@@ -233,6 +233,12 @@ extension DayLogModel {
         if isCurrent(record) { return editDayEnd(date, now: now, place: place) }
         update { journal in
             if let id = record?.id, let index = journal.history.firstIndex(where: { $0.id == id }) {
+                // The final rest starts at Day closed and moves with it; left behind, a later close would turn it into
+                // a pause inside the shift (a split for the counter).
+                if let oldEnd = journal.history[index].end, let last = journal.history[index].rests.indices.last,
+                   journal.history[index].rests[last].start == oldEnd {
+                    journal.history[index].rests[last].start = date
+                }
                 journal.history[index].end = date
                 journal.history[index].isClosed = true
                 if let place { journal.history[index].endPlace = place }

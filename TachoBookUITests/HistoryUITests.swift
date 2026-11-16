@@ -169,6 +169,77 @@ final class HistoryUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Shift start"].waitForNonExistence(timeout: 5))
     }
 
+    // MARK: - Edit a past day (iteration 2, decision 8, 16.11.2026)
+
+    /// History → a past day → Day closed → a new time → Confirm: the summary shows it at once, over the same sheet.
+    @MainActor
+    func testEditingDayClosedFromTheDaySummaryUpdatesIt() throws {
+        let app = launchOnHistory()
+        dayCell(app, daysBack: 2).tap()
+        let closed = app.buttons["daySummaryClosed"]
+        XCTAssertTrue(closed.waitForExistence(timeout: 5), "Day closed is a button")
+        XCTAssertTrue(closed.label.contains("20:00"), closed.label)
+        XCTAssertTrue(app.buttons["daySummaryStarted"].exists)
+        XCTAssertTrue(app.buttons["daySummaryDriving"].exists)
+        XCTAssertGreaterThanOrEqual(closed.frame.height, 44)
+        attach("Day summary with editable fields")
+
+        closed.tap()
+        XCTAssertTrue(app.staticTexts["Rest start"].waitForExistence(timeout: 5))
+        let picker = app.datePickers["sheetDatePicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        attach("Edit sheet from History")
+        // The time part of the compact picker opens the wheels: 20:00 → 19:00.
+        let time = picker.buttons["20:00"]
+        XCTAssertTrue(time.exists)
+        time.tap()
+        let hours = app.pickerWheels.element(boundBy: 0)
+        XCTAssertTrue(hours.waitForExistence(timeout: 5))
+        hours.adjust(toPickerWheelValue: "19")
+        app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "00")
+        // Close the wheels with a tap below them (the popover covers the sheet title).
+        app.staticTexts["countryHint"].tap()
+        XCTAssertTrue(hours.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(picker.buttons["19:00"].waitForExistence(timeout: 5), "the picker shows 19:00")
+        let confirm = app.buttons["confirmSheetButton"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirm.isEnabled)
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["Rest start"].waitForNonExistence(timeout: 5))
+
+        XCTAssertTrue(app.staticTexts["Day summary"].waitForExistence(timeout: 5), "back on the summary")
+        let updated = app.buttons["daySummaryClosed"]
+        XCTAssertTrue(updated.waitForExistence(timeout: 5))
+        XCTAssertTrue(updated.label.contains("19:00"), updated.label)
+        attach("Day summary after save")
+        // Audit the editable sheet expanded, as the read-only one (see testTappingADayOpensItsSummary…).
+        let title = app.staticTexts["Day summary"]
+        title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)))
+        try audit(app, "Editable Day summary (expanded)")
+        app.buttons["closeSheetButton"].tap()
+
+        // Home shows the edit too: two days back is within its swipe.
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.buttons["startOfDayButton"].waitForExistence(timeout: 5)
+                      || app.buttons["summaryDayClosed"].waitForExistence(timeout: 5))
+        for _ in 0..<2 { app.swipeRight() }
+        let homeClosed = app.buttons["summaryDayClosed"]
+        XCTAssertTrue(homeClosed.waitForExistence(timeout: 5))
+        XCTAssertTrue(homeClosed.label.contains("19:00"), homeClosed.label)
+    }
+
+    /// An empty day stays exactly as it was (decision 9): no edit fields.
+    @MainActor
+    func testAnEmptyDayHasNoEditFields() {
+        let app = launchOnHistory()
+        dayCell(app, daysBack: 4).tap()
+        XCTAssertTrue(app.staticTexts["daySummaryEmpty"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["daySummaryStarted"].exists)
+        XCTAssertFalse(app.buttons["daySummaryClosed"].exists)
+        XCTAssertFalse(app.buttons["daySummaryDriving"].exists)
+    }
+
     // MARK: - Helpers
 
     @MainActor
