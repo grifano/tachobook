@@ -108,7 +108,9 @@ struct ViolationsCard: View {
         Button { onSelect(row.key) } label: {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(row.title).font(.body)
+                    // Medium weight, as the subtitles: Body regular fails the contrast audit on the glass card
+                    // (a false positive, the real contrast is about 10.9:1).
+                    Text(row.title).font(.body.weight(.medium))
                     // Medium weight, as the Home widget subtitles: Caption 1 regular fails the contrast audit on glass.
                     Text(row.subtitle).font(.caption.weight(.medium))
                 }
