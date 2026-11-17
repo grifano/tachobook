@@ -231,6 +231,48 @@ final class ViolationsUITests: XCTestCase {
                       "two violations: the list opens")
     }
 
+    // MARK: - Add past violation (owner decisions 17.11.2026)
+
+    /// The header's Add on Violations starts the same Add past shift flow as History: a past violation is entered as
+    /// the shift it happened in.
+    @MainActor
+    func testAddOnViolationsStartsTheAddPastShiftFlow() throws {
+        let app = launch(["-resetHomeFlowTest", "-seedViolations"], tab: "Violations")
+        let add = app.buttons["addPastViolationButton"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        XCTAssertEqual(add.label, "Add past shift")
+        attach("Violations with Add")
+        try audit(app, "Violations with Add")
+
+        add.tap()
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["When did your shift begin?"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["sheetDatePicker"].exists)
+        attach("Violations Add - start sheet")
+        app.buttons["closeSheetButton"].tap()
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(app.buttons.matching(identifier: "violationRow").count, 3, "Cancel saves nothing")
+    }
+
+    /// Seven violations older than 56 days: the gray group shows the newest five and Show all opens the rest.
+    @MainActor
+    func testOlderGroupShowsFiveUntilShowAll() throws {
+        let app = launch(["-resetHomeFlowTest", "-seedViolations", "-seedOlderViolations", "6"], tab: "Violations")
+        let rows = app.buttons.matching(identifier: "violationRow")
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(rows.count, 2 + 5)
+        let showAll = app.buttons["showAllOlderButton"]
+        XCTAssertTrue(showAll.exists)
+        XCTAssertEqual(showAll.value as? String, "7")
+        attach("Older group capped at 5 with Show all")
+        try audit(app, "Older group with Show all")
+
+        showAll.tap()
+        XCTAssertTrue(showAll.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(rows.count, 2 + 7)
+        attach("Older group after Show all")
+    }
+
     // MARK: - Helpers
 
     @MainActor

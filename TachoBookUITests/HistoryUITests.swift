@@ -93,9 +93,10 @@ final class HistoryUITests: XCTestCase {
 
     // MARK: - Add past shift (owner decision 5, 16.11.2026)
 
-    /// The Add button is on History only, reads "Add past shift" to VoiceOver and starts the normal Shift start sheet.
+    /// The Add button is on History (and Violations, see ViolationsUITests), not on Home; it reads "Add past shift" to
+    /// VoiceOver and starts the normal Shift start sheet.
     @MainActor
-    func testAddPastShiftButtonIsOnHistoryOnlyAndStartsTheShiftStartSheet() throws {
+    func testAddPastShiftButtonIsNotOnHomeAndStartsTheShiftStartSheet() throws {
         let app = launchOnHistory()
         let add = app.buttons["addPastShiftButton"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
@@ -110,10 +111,9 @@ final class HistoryUITests: XCTestCase {
         app.buttons["closeSheetButton"].tap()
         XCTAssertTrue(app.staticTexts["Shift start"].waitForNonExistence(timeout: 5))
 
-        for tab in ["Home", "Violations"] {
-            app.tabBars.buttons[tab].tap()
-            XCTAssertFalse(app.buttons["addPastShiftButton"].waitForExistence(timeout: 2), "no Add on \(tab)")
-        }
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertFalse(app.buttons["addPastShiftButton"].waitForExistence(timeout: 2), "no Add on Home")
+        XCTAssertFalse(app.buttons["addPastViolationButton"].exists, "no Add on Home")
     }
 
     /// Start → close → driving saves one shift; a second entry on the same day asks to replace it, and Cancel keeps
