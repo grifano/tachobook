@@ -634,31 +634,11 @@ public struct DashboardView: View {
                               onConfirm: { model.setDrivingMinutes($0); dismissSheet() },
                               onCancel: dismissSheet)
         case .pastDayStart:
-            let (day, now) = (viewedDay, Date())
-            let record = model.dayRecord(on: day)
-            TimeEntrySheet(kind: .shiftStart, initialDate: record?.start ?? DayHistory.combine(day: day, timeOf: now),
-                           range: DayHistory.range(of: day),
-                           check: { model.checkSetStart($0, onDay: day, now: Date()) },
-                           warning: overLimitLine(day: day, change: { $0.setStart($1, onDay: day, now: Date()) }),
-                           country: editCountry(record?.startPlace),
-                           onConfirm: { model.setStart($0, onDay: day, now: Date(), place: $1); dismissSheet() },
-                           onCancel: dismissSheet)
+            PastDayEditSheet(model: model, day: viewedDay, field: .start, onSave: dismissSheet, onCancel: dismissSheet)
         case .pastDayEnd:
-            let (day, now) = (viewedDay, Date())
-            let record = model.dayRecord(on: day)
-            let floor = record?.start ?? day
-            TimeEntrySheet(kind: .restStart, initialDate: record?.end ?? DayHistory.combine(day: day, timeOf: now),
-                           range: floor...max(floor, now),
-                           check: { model.checkSetEnd($0, onDay: day, now: Date()) },
-                           warning: overLimitLine(day: day, change: { $0.setEnd($1, onDay: day, now: Date()) }),
-                           country: editCountry(record?.endPlace),
-                           onConfirm: { model.setEnd($0, onDay: day, now: Date(), place: $1); dismissSheet() },
-                           onCancel: dismissSheet)
+            PastDayEditSheet(model: model, day: viewedDay, field: .end, onSave: dismissSheet, onCancel: dismissSheet)
         case .pastDriving:
-            let day = viewedDay
-            DailyDrivingSheet(initialMinutes: model.dayRecord(on: day)?.drivingMinutes,
-                              onConfirm: { model.setDriving(minutes: $0, onDay: day); dismissSheet() },
-                              onCancel: dismissSheet)
+            PastDayEditSheet(model: model, day: viewedDay, field: .driving, onSave: dismissSheet, onCancel: dismissSheet)
         case .violation:
             ViolationSheet(model: model, key: ViolationKey(periodID: model.dutyID, kind: .dutyLimit), style: .home,
                            onClose: dismissSheet)
@@ -681,14 +661,6 @@ public struct DashboardView: View {
         { date in
             DayLogModel.overLimitLine(model.dutyViolation(previewing: { change($0, date) }, periodID: { $0.dutyID },
                                                           now: Date()))
-        }
-    }
-
-    /// Decision 14 for an earlier day: the shift shown for that day after the change.
-    private func overLimitLine(day: Date, change: @escaping (DayLogModel, Date) -> Void) -> (Date) -> String? {
-        { date in
-            DayLogModel.overLimitLine(model.dutyViolation(previewing: { change($0, date) },
-                                                          periodID: { $0.historyRecord(on: day)?.id }, now: Date()))
         }
     }
 

@@ -91,6 +91,155 @@ final class HistoryUITests: XCTestCase {
         XCTAssertFalse(app.buttons["closeSheetButton"].waitForExistence(timeout: 2))
     }
 
+    // MARK: - Add past shift (owner decision 5, 16.11.2026)
+
+    /// The Add button is on History only, reads "Add past shift" to VoiceOver and starts the normal Shift start sheet.
+    @MainActor
+    func testAddPastShiftButtonIsOnHistoryOnlyAndStartsTheShiftStartSheet() throws {
+        let app = launchOnHistory()
+        let add = app.buttons["addPastShiftButton"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        XCTAssertEqual(add.label, "Add past shift")
+        try audit(app, "History with Add")
+
+        add.tap()
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["When did your shift begin?"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["sheetDatePicker"].exists)
+        attach("Add past shift - start sheet")
+        app.buttons["closeSheetButton"].tap()
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForNonExistence(timeout: 5))
+
+        for tab in ["Home", "Violations"] {
+            app.tabBars.buttons[tab].tap()
+            XCTAssertFalse(app.buttons["addPastShiftButton"].waitForExistence(timeout: 2), "no Add on \(tab)")
+        }
+    }
+
+    /// Start → close → driving saves one shift; a second entry on the same day asks to replace it, and Cancel keeps
+    /// the sheet open.
+    @MainActor
+    func testAddPastShiftRunsTheNormalFlowAndAsksBeforeReplacing() throws {
+        let app = launchOnHistory()
+        let add = app.buttons["addPastShiftButton"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        let confirm = app.buttons["confirmSheetButton"]
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForExistence(timeout: 5))
+        // The seeded shifts have no country and a past date is never filled from the location: the driver picks it.
+        XCTAssertFalse(confirm.isEnabled)
+        app.buttons["countryPicker"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("Pol")
+        let poland = app.buttons["countryRow-PL"]
+        XCTAssertTrue(poland.waitForExistence(timeout: 5))
+        poland.tap()
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirm.isEnabled)
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["Rest start"].waitForExistence(timeout: 5))
+        attach("Add past shift - close sheet")
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["Driving time"].waitForExistence(timeout: 5))
+        for digit in ["1", "3", "0"] { app.buttons[digit].tap() }
+        XCTAssertEqual(app.staticTexts["drivingValue"].label, "Driving time 1h30")
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["Driving time"].waitForNonExistence(timeout: 5))
+
+        // Today now has the new shift.
+        dayCell(app, daysBack: 0).tap()
+        XCTAssertTrue(app.staticTexts["Day summary"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["daySummaryDriving"].label.contains("1h30m"))
+        app.buttons["closeSheetButton"].tap()
+        XCTAssertTrue(app.staticTexts["Day summary"].waitForNonExistence(timeout: 5))
+
+        // The same day again: one shift per day, so it asks first.
+        add.tap()
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForExistence(timeout: 5))
+        confirm.tap()
+        let alert = app.alerts["Replace your shift?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        attach("Add past shift - replace alert")
+        alert.buttons["Cancel"].tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Shift start"].exists, "Cancel returns to the sheet")
+        app.buttons["closeSheetButton"].tap()
+        XCTAssertTrue(app.staticTexts["Shift start"].waitForNonExistence(timeout: 5))
+    }
+
+    // MARK: - Edit a past day (iteration 2, decision 8, 16.11.2026)
+
+    /// History → a past day → Day closed → a new time → Confirm: the summary shows it at once, over the same sheet.
+    @MainActor
+    func testEditingDayClosedFromTheDaySummaryUpdatesIt() throws {
+        let app = launchOnHistory()
+        dayCell(app, daysBack: 2).tap()
+        let closed = app.buttons["daySummaryClosed"]
+        XCTAssertTrue(closed.waitForExistence(timeout: 5), "Day closed is a button")
+        XCTAssertTrue(closed.label.contains("20:00"), closed.label)
+        XCTAssertTrue(app.buttons["daySummaryStarted"].exists)
+        XCTAssertTrue(app.buttons["daySummaryDriving"].exists)
+        XCTAssertGreaterThanOrEqual(closed.frame.height, 44)
+        attach("Day summary with editable fields")
+
+        closed.tap()
+        XCTAssertTrue(app.staticTexts["Rest start"].waitForExistence(timeout: 5))
+        let picker = app.datePickers["sheetDatePicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        attach("Edit sheet from History")
+        // The time part of the compact picker opens the wheels: 20:00 → 19:00.
+        let time = picker.buttons["20:00"]
+        XCTAssertTrue(time.exists)
+        time.tap()
+        let hours = app.pickerWheels.element(boundBy: 0)
+        XCTAssertTrue(hours.waitForExistence(timeout: 5))
+        hours.adjust(toPickerWheelValue: "19")
+        app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "00")
+        // Close the wheels with a tap below them (the popover covers the sheet title).
+        app.staticTexts["countryHint"].tap()
+        XCTAssertTrue(hours.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(picker.buttons["19:00"].waitForExistence(timeout: 5), "the picker shows 19:00")
+        let confirm = app.buttons["confirmSheetButton"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirm.isEnabled)
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["Rest start"].waitForNonExistence(timeout: 5))
+
+        XCTAssertTrue(app.staticTexts["Day summary"].waitForExistence(timeout: 5), "back on the summary")
+        let updated = app.buttons["daySummaryClosed"]
+        XCTAssertTrue(updated.waitForExistence(timeout: 5))
+        XCTAssertTrue(updated.label.contains("19:00"), updated.label)
+        attach("Day summary after save")
+        // Audit the editable sheet expanded, as the read-only one (see testTappingADayOpensItsSummary…).
+        let title = app.staticTexts["Day summary"]
+        title.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)))
+        try audit(app, "Editable Day summary (expanded)")
+        app.buttons["closeSheetButton"].tap()
+
+        // Home shows the edit too: two days back is within its swipe.
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.buttons["startOfDayButton"].waitForExistence(timeout: 5)
+                      || app.buttons["summaryDayClosed"].waitForExistence(timeout: 5))
+        for _ in 0..<2 { app.swipeRight() }
+        let homeClosed = app.buttons["summaryDayClosed"]
+        XCTAssertTrue(homeClosed.waitForExistence(timeout: 5))
+        XCTAssertTrue(homeClosed.label.contains("19:00"), homeClosed.label)
+    }
+
+    /// An empty day stays exactly as it was (decision 9): no edit fields.
+    @MainActor
+    func testAnEmptyDayHasNoEditFields() {
+        let app = launchOnHistory()
+        dayCell(app, daysBack: 4).tap()
+        XCTAssertTrue(app.staticTexts["daySummaryEmpty"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["daySummaryStarted"].exists)
+        XCTAssertFalse(app.buttons["daySummaryClosed"].exists)
+        XCTAssertFalse(app.buttons["daySummaryDriving"].exists)
+    }
+
     // MARK: - Helpers
 
     @MainActor

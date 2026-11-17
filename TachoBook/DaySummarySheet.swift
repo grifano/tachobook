@@ -5,10 +5,14 @@
 
 import SwiftUI
 
-/// Figma frame 02 "Day tapped - Day summary sheet (medium)" (708:31844): a read-only summary of one day
-/// with the Work and Rest gauges and the Day Times Row as on Home; no country codes (decision 8). A day with a
-/// recorded deviation opens full height with its lines and "Go to rule" / "Skip for now" (Flow 3 View History,
-/// frame 03, 750:15188; decision 20). Every value comes from the same helpers as Home.
+/// Figma frame 02 "Day tapped - Day summary sheet (medium)" (708:31844): a summary of one day with the Work and Rest
+/// gauges and the Day Times Row as on Home; no country codes (decision 8). A day with a recorded deviation opens full
+/// height with its lines and "Go to rule" / "Skip for now" (Flow 3 View History, frame 03, 750:15188; decision 20).
+/// Every value comes from the same helpers as Home.
+///
+/// Day started, Driving and Day closed open the edit sheet of an earlier day over this sheet (Add Past Shift task,
+/// decision 8, 16.11.2026); everything shown is recomputed from the records after a save. An edit that creates a
+/// deviation opens its violation sheet. An empty day and the open shift stay read-only (decision 9; as on Home).
 struct DaySummarySheet: View {
     var model: DayLogModel
     var day: Date
@@ -16,6 +20,11 @@ struct DaySummarySheet: View {
     /// Several violations on one day: "Go to rule" opens the Violations list instead (not in Figma, decision 20).
     var onOpenViolations: () -> Void = {}
     @State private var rule: ViolationKey?
+    @State private var edit: PastDayEditSheet.Field?
+    /// The deviations in the records when the edit sheet opened.
+    @State private var violationsBefore: Set<ViolationKey> = []
+    /// A deviation the last edit created, shown once the edit sheet is gone.
+    @State private var newRule: ViolationKey?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -49,6 +58,15 @@ struct DaySummarySheet: View {
         .sheet(item: $rule) { key in
             ViolationSheet(model: model, key: key, style: .list, onClose: { rule = nil })
         }
+        // Over this sheet, so closing the edit returns to the updated summary.
+        .sheet(item: $edit, onDismiss: showNewRule) { field in
+            PastDayEditSheet(model: model, day: day, field: field,
+                             onSave: {
+                                 newRule = model.firstNewViolation(since: violationsBefore, now: Date())?.key
+                                 edit = nil
+                             },
+                             onCancel: { edit = nil })
+        }
         .presentationDragIndicator(.hidden)
         .presentationBackground(Color(red: 245/255, green: 245/255, blue: 245/255))
     }
@@ -60,7 +78,7 @@ struct DaySummarySheet: View {
                 VStack(spacing: 16) { gauges(summary) }
             }
             .frame(maxWidth: .infinity)
-            DayTimesRow(items: summary.times)
+            DayTimesRow(items: summary.times, onEdit: editAction)
             if !summary.violations.isEmpty {
                 violationLines(summary)
             }
@@ -68,6 +86,24 @@ struct DaySummarySheet: View {
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 16)
+    }
+
+    /// nil keeps the row read-only: an empty day or the open shift.
+    private var editAction: ((PastDayEditSheet.Field) -> Void)? {
+        guard model.canEditHistoryDay(day) else { return nil }
+        return { startEdit($0) }
+    }
+
+    private func startEdit(_ field: PastDayEditSheet.Field) {
+        violationsBefore = Set(model.violations(now: Date()).map(\.key))
+        edit = field
+    }
+
+    /// Part B step 7 for an edit: the violation sheet of a deviation the edit created.
+    private func showNewRule() {
+        guard let key = newRule else { return }
+        newRule = nil
+        rule = key
     }
 
     private var hasViolations: Bool {
@@ -135,6 +171,7 @@ struct DaySummary {
         var value: String
         /// The country under a start or close time, as on Home ("🇭🇺 H", "?").
         var detail: ShiftPlaceLine? = nil
+        var field: PastDayEditSheet.Field
         var identifier: String
         var id: String { identifier }
     }
@@ -200,22 +237,24 @@ struct DaySummary {
             Time(symbol: "play.circle", label: "Day started",
                  value: record?.start.map { HomeTimeline.clockLabel($0, relativeTo: day, calendar: calendar) } ?? "?",
                  detail: ShiftPlaceLine(place: record?.startPlace, recordedAt: record?.start),
-                 identifier: "daySummaryStarted"),
+                 field: .start, identifier: "daySummaryStarted"),
             Time(symbol: "steeringwheel", label: "Driving",
                  value: HomeTimeline.drivingLabel(minutes: record?.drivingMinutes),
-                 identifier: "daySummaryDriving"),
+                 field: .driving, identifier: "daySummaryDriving"),
             Time(symbol: "stop.circle", label: "Day closed",
                  value: record?.end.map { HomeTimeline.clockLabel($0, relativeTo: day, calendar: calendar) } ?? "?",
                  detail: ShiftPlaceLine(place: record?.endPlace, recordedAt: record?.end),
-                 identifier: "daySummaryClosed"),
+                 field: .end, identifier: "daySummaryClosed"),
         ]
     }
 }
 
-/// Figma "Day Times Row": three columns separated by faded rules; read-only.
+/// Figma "Day Times Row": three columns separated by faded rules. With `onEdit` each column is a button that opens
+/// its edit sheet, as Home's summary card; without it the row is read-only.
 private struct DayTimesRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var items: [DaySummary.Time]
+    var onEdit: ((PastDayEditSheet.Field) -> Void)?
 
     var body: some View {
         let stacked = dynamicTypeSize.isAccessibilitySize
@@ -226,11 +265,27 @@ private struct DayTimesRow: View {
                 if index > 0 && !stacked {
                     FadedRule(axis: .vertical).frame(width: 1, height: 44)
                 }
-                HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value, detail: item.detail)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier(item.identifier)
+                column(item)
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder private func column(_ item: DaySummary.Time) -> some View {
+        let value = HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value, detail: item.detail)
+        if let onEdit {
+            Button { onEdit(item.field) } label: {
+                value
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Edit")
+            .accessibilityIdentifier(item.identifier)
+        } else {
+            value
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier(item.identifier)
+        }
     }
 }

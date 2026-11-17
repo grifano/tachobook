@@ -7,7 +7,7 @@ import SwiftUI
 
 /// Figma "Main Top Header": the viewed weekday and date with the week strip. After swiping back
 /// a Today button appears at the trailing edge (not in Figma; a solid dark capsule so its text keeps contrast).
-/// The trailing slot is reserved for per-tab actions.
+/// The trailing slot holds an optional per-tab action (`HeaderAction`), e.g. "Add" on History.
 public struct DashboardHeaderView: View {
     /// The day shown (today, or an earlier day after swiping back).
     public var date: Date
@@ -19,9 +19,13 @@ public struct DashboardHeaderView: View {
     public var onSelect: (Int) -> Void
     /// VoiceOver adjust: +1 goes toward today, −1 to the previous day.
     public var onAdjust: (Int) -> Void
+    /// The trailing glass button; nil leaves the slot empty.
+    public var trailingAction: HeaderAction?
 
     public init(date: Date = Date(), today: Date? = nil, showsDateStrip: Bool = true, onToday: @escaping () -> Void = {},
-                onSelect: @escaping (Int) -> Void = { _ in }, onAdjust: @escaping (Int) -> Void = { _ in }) {
+                onSelect: @escaping (Int) -> Void = { _ in }, onAdjust: @escaping (Int) -> Void = { _ in },
+                trailingAction: HeaderAction? = nil) {
+        self.trailingAction = trailingAction
         self.date = date
         self.today = today ?? date
         self.showsDateStrip = showsDateStrip
@@ -67,6 +71,10 @@ public struct DashboardHeaderView: View {
                     .accessibilityIdentifier("todayButton")
                     .transition(.opacity)
                 }
+
+                if let trailingAction {
+                    HeaderActionButton(action: trailingAction)
+                }
             }
             .padding(.horizontal, 16)
 
@@ -84,6 +92,55 @@ public struct DashboardHeaderView: View {
             }
         }
         .padding(.bottom, 10)
+    }
+}
+
+/// A per-tab action in the header's trailing slot. Kept generic so each tab can pass its own (History: Add past
+/// shift; Home in a later Task).
+public struct HeaderAction {
+    /// The visible text, e.g. "Add".
+    public var title: String
+    public var systemImage: String
+    /// What VoiceOver reads when it differs from the visible text, e.g. "Add past shift".
+    public var accessibilityLabel: String
+    public var identifier: String
+    public var action: () -> Void
+
+    public init(title: String, systemImage: String, accessibilityLabel: String? = nil, identifier: String,
+                action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.accessibilityLabel = accessibilityLabel ?? title
+        self.identifier = identifier
+        self.action = action
+    }
+}
+
+/// Figma "Button - Liquid Glass - Text", Tinted=False (Add Past Shift · 01, 814:11488): symbol and text in white
+/// over Liquid Glass with the brand-blue tint, as the former settings gear. 48 pt high at the default size
+/// (36 pt content + 6 pt padding), 20 pt side padding; it grows with Dynamic Type and has no fixed width.
+struct HeaderActionButton: View {
+    var action: HeaderAction
+
+    var body: some View {
+        Button(action: action.action) {
+            Text("\(Image(systemName: action.systemImage)) \(action.title)")
+                .font(.body.weight(.medium))
+                .foregroundStyle(Color.tachoTextOnDark)
+                .lineLimit(1)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 6)
+                .frame(minHeight: 48)
+                .contentShape(Capsule())
+                .glassEffect(.regular.tint(Color.tachoBlue.opacity(0.5)).interactive(), in: Capsule())
+                .environment(\.colorScheme, .dark)
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        // Figma "Trailing": 8 pt from the top of the title row.
+        .padding(.top, 8)
+        .accessibilityLabel(action.accessibilityLabel)
+        .accessibilityIdentifier(action.identifier)
     }
 }
 
