@@ -12,6 +12,8 @@ struct HistoryView: View {
     var model: DayLogModel
     /// Shows the Violations tab: "Go to rule" on a day with several violations (decision 20).
     var onOpenViolations: () -> Void = {}
+    /// A date to open in the Day summary when the tab appears (from Home); cleared once opened.
+    var openDay: Binding<Date?> = .constant(nil)
     @State private var summaryDay: SummaryDay?
     /// The Add past shift flow (owner decision 5, 16.11.2026), started from the header with now.
     @State private var pastShift: PastShiftRequest?
@@ -50,6 +52,11 @@ struct HistoryView: View {
                             })
         }
         .pastShiftFlow($pastShift, model: model)
+        .onChange(of: openDay.wrappedValue, initial: true) { _, day in
+            guard let day else { return }
+            summaryDay = SummaryDay(date: day)
+            openDay.wrappedValue = nil
+        }
     }
 
     private func calendarCard(now: Date) -> some View {

@@ -50,6 +50,10 @@ public struct DashboardView: View {
     /// The small "Older days are in History." label after a swipe past the oldest reachable day.
     @State private var showLimitHint = false
     @State private var limitHintToken = 0
+    /// The Add past shift flow, started from the header on a past day without a shift (owner decision 16.11.2026).
+    @State private var pastShift: PastShiftRequest?
+    /// Opens the History tab with the Day summary of a date: "Tap to see this day" past the Home swipe.
+    private let onOpenHistoryDay: (Date) -> Void
     /// Finds the country for a new Start or Close (a stub in UI tests).
     private let locator = CountryLocator.forLaunch
 
@@ -64,8 +68,9 @@ public struct DashboardView: View {
         return 0
     }
 
-    public init(model: DayLogModel = DayLogModel.dashboardModel()) {
+    public init(model: DayLogModel = DayLogModel.dashboardModel(), onOpenHistoryDay: @escaping (Date) -> Void = { _ in }) {
         self._model = State(initialValue: model)
+        self.onOpenHistoryDay = onOpenHistoryDay
     }
 
     /// The default tab follows the shift state; the toggle only overrides the view.
@@ -85,7 +90,8 @@ public struct DashboardView: View {
             VStack(spacing: 0) {
                 DashboardHeaderView(date: daysBack == 0 ? now : DayHistory.day(daysBack: daysBack, from: now),
                                     today: now, onToday: { step(to: 0) }, onSelect: { step(to: $0) },
-                                    onAdjust: { step(to: daysBack - $0) })
+                                    onAdjust: { step(to: daysBack - $0) },
+                                    trailingAction: noActivitiesDay(now: now) == nil ? nil : addPastShiftAction(now: now))
                 ScrollView {
                     VStack(spacing: 20) {
                         if daysBack == 0 {
@@ -141,6 +147,7 @@ public struct DashboardView: View {
         .sheet(item: $sheet, onDismiss: presentPendingDrivingAlert) { sheet in
             sheetContent(sheet)
         }
+        .pastShiftFlow($pastShift, model: model)
         .alert("Shift closed", isPresented: $showDrivingAlert) {
             Button("Later", role: .cancel) {}
             Button("Add time") { present(.driving) }
@@ -497,12 +504,43 @@ public struct DashboardView: View {
         let record = model.dayRecord(on: day)
         // The count as it stood at the end of that day (owner decision 5).
         let used = model.reducedRests(endOf: day, now: now)
-        if tab.wrappedValue == .rest {
-            restTakenWidget(day: day, rest: model.restTaken(after: record, now: now), reducedRestsUsed: used)
+        if let empty = noActivitiesDay(now: now) {
+            // No shift that day: the No activities widget instead of the switch, timer and Day summary.
+            NoActivitiesWidget(lastShift: empty.lastShift,
+                               onOpen: empty.target(now: now).map { target in { open(target) } })
+                .transition(.opacity)
         } else {
-            pastWorkWidget(day: day, record: record, now: now, reducedRestsUsed: used)
+            if tab.wrappedValue == .rest {
+                restTakenWidget(day: day, rest: model.restTaken(after: record, now: now), reducedRestsUsed: used)
+            } else {
+                pastWorkWidget(day: day, record: record, now: now, reducedRestsUsed: used)
+            }
+            pastSummaryCard(day: day, record: record, now: now)
         }
-        pastSummaryCard(day: day, record: record, now: now)
+    }
+
+    /// The viewed past day without a shift record; nil on today and on days with a shift.
+    private func noActivitiesDay(now: Date) -> NoActivitiesDay? {
+        guard daysBack > 0 else { return nil }
+        return model.noActivitiesDay(onDay: DayHistory.day(daysBack: daysBack, from: now), now: now)
+    }
+
+    /// Figma 838:33650 "Add": the same Add past shift flow as History, with the viewed day preselected.
+    private func addPastShiftAction(now: Date) -> HeaderAction {
+        HeaderAction(title: "Add", systemImage: "calendar.badge.plus", accessibilityLabel: "Add past shift",
+                     identifier: "addPastShiftButton") {
+            pastShift = PastShiftRequest(day: DayHistory.day(daysBack: daysBack, from: Date()))
+        }
+    }
+
+    /// "Tap to see this day": the day of the last shift on Home when the swipe reaches it, else in History.
+    private func open(_ target: NoActivitiesDay.Target) {
+        let justSwiped = swipeEndedAt.map { Date().timeIntervalSince($0) < 0.4 } ?? false
+        guard !isSwiping, !justSwiped else { return }
+        switch target {
+        case .home(let days): step(to: days)
+        case .history(let day): onOpenHistoryDay(day)
+        }
     }
 
     private func pastWorkWidget(day: Date, record: DutyPeriod?, now: Date, reducedRestsUsed: Int?) -> some View {
@@ -539,26 +577,6 @@ public struct DashboardView: View {
             ])
     }
 
-    /// One line under the summary when a rest covers the whole day; a tap opens the day the rest
-    /// started when the swipe can reach it, otherwise it is plain text.
-    private func restCoverFooter(_ note: RestCoverNote, now: Date) -> AnyView {
-        let text = Text("No shift this day \u{2014} you were resting since \(HomeTimeline.dayAndTime(note.restStart)).")
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(Color.tachoTextOnLight)
-            .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        guard let target = DayHistory.daysBack(of: note.restStart, from: now) else {
-            return AnyView(text.accessibilityIdentifier("restCoverNote"))
-        }
-        return AnyView(
-            Button { step(to: target) } label: { text.frame(minHeight: 44).contentShape(Rectangle()) }
-                .buttonStyle(.plain)
-                .accessibilityHint("Opens that day")
-                .accessibilityIdentifier("restCoverNote")
-        )
-    }
-
     /// Day started, Driving and Day closed of an earlier day; empty values show "?".
     private func pastSummaryCard(day: Date, record: DutyPeriod?, now: Date) -> some View {
         let items = [
@@ -574,9 +592,7 @@ public struct DashboardView: View {
                             detail: ShiftPlaceLine(place: record?.endPlace, recordedAt: record?.end),
                             identifier: "summaryDayClosed") { present(.pastDayEnd) },
         ]
-        let note = model.restCoverNote(onDay: day, now: now)
-        return HomeSecondaryCard(symbol: "info.circle.fill", title: "Day summary", count: items.count,
-                                 footer: note.map { restCoverFooter($0, now: now) }) { index in
+        return HomeSecondaryCard(symbol: "info.circle.fill", title: "Day summary", count: items.count) { index in
             let item = items[index]
             Button(action: item.action) {
                 HomeValueColumn(symbol: item.symbol, label: item.label, value: item.value, detail: item.detail)
@@ -587,8 +603,6 @@ public struct DashboardView: View {
             .accessibilityIdentifier(item.identifier)
             .accessibilityHint("Edit")
         }
-        // The note slides in and out with the system animation when the day gains or loses it.
-        .animation(.default, value: note)
     }
 
     // MARK: - Sheets
@@ -705,7 +719,7 @@ private struct LimitHint: View {
             .foregroundStyle(Color.tachoTextOnDark)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            // Same dark fill as the Today button, so the text keeps its contrast over the photo.
+            // Solid dark fill, so the text keeps its contrast over the photo.
             .background(Color.tachoTextOnLight, in: Capsule())
             .accessibilityIdentifier("historyLimitHint")
     }

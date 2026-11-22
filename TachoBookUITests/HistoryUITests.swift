@@ -93,8 +93,8 @@ final class HistoryUITests: XCTestCase {
 
     // MARK: - Add past shift (owner decision 5, 16.11.2026)
 
-    /// The Add button is on History (and Violations, see ViolationsUITests), not on Home; it reads "Add past shift" to
-    /// VoiceOver and starts the normal Shift start sheet.
+    /// The Add button is on History (and Violations, see ViolationsUITests), not on Home today (only on a past day without
+    /// a shift, see DayHistoryUITests); it reads "Add past shift" to VoiceOver and starts the normal Shift start sheet.
     @MainActor
     func testAddPastShiftButtonIsNotOnHomeAndStartsTheShiftStartSheet() throws {
         let app = launchOnHistory()
