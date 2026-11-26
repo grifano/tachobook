@@ -5,9 +5,9 @@
 
 import SwiftUI
 
-/// Figma "Main Top Header": the viewed weekday and date with the week strip. After swiping back
-/// a Today button appears at the trailing edge (not in Figma; a solid dark capsule so its text keeps contrast).
-/// The trailing slot holds an optional per-tab action (`HeaderAction`), e.g. "Add" on History.
+/// Figma "Main Top Header": the viewed weekday and date with the week strip. On an earlier day the round orange
+/// Home button returns to today (owner decision 16.11.2026, Figma 838:33650), at the far right.
+/// The trailing slot holds an optional per-tab action (`HeaderAction`), e.g. "Add" on History, before it.
 public struct DashboardHeaderView: View {
     /// The day shown (today, or an earlier day after swiping back).
     public var date: Date
@@ -37,10 +37,14 @@ public struct DashboardHeaderView: View {
     private var isToday: Bool { Calendar.current.isDate(date, inSameDayAs: today) }
     @Namespace private var selectionCircle
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     public var body: some View {
+        // At accessibility text sizes the buttons go under the title, so the weekday is not squeezed into syllables.
+        let titleRow = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0)) : AnyLayout(HStackLayout(alignment: .top, spacing: 5))
         VStack(spacing: 8) {
-            HStack(alignment: .top, spacing: 5) {
+            titleRow {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(date.formatted(.dateTime.weekday(.wide)))
                         .font(.largeTitle.weight(.semibold))
@@ -55,25 +59,15 @@ public struct DashboardHeaderView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                if !isToday {
-                    Button(action: onToday) {
-                        Text("Today")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.tachoTextOnDark)
-                            .padding(.horizontal, 16)
-                            .frame(minHeight: 44)
-                            // Solid dark fill: translucent glass over the sky failed the contrast audit.
-                            .background(Color.tachoTextOnLight, in: Capsule())
-                            .contentShape(Capsule())
+                // Figma 838:33650 "Row": the tab's action, then the round Home button at the far right.
+                HStack(spacing: 16) {
+                    if let trailingAction {
+                        HeaderActionButton(action: trailingAction)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Back to today")
-                    .accessibilityIdentifier("todayButton")
-                    .transition(.opacity)
-                }
-
-                if let trailingAction {
-                    HeaderActionButton(action: trailingAction)
+                    if !isToday {
+                        HomeTodayButton(action: onToday)
+                            .transition(.opacity)
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -96,7 +90,7 @@ public struct DashboardHeaderView: View {
 }
 
 /// A per-tab action in the header's trailing slot. Kept generic so each tab can pass its own (History: Add past
-/// shift; Home in a later Task).
+/// shift; Home: Add past shift while a past day shows the No activities widget).
 public struct HeaderAction {
     /// The visible text, e.g. "Add".
     public var title: String
@@ -141,6 +135,31 @@ struct HeaderActionButton: View {
         .padding(.top, 8)
         .accessibilityLabel(action.accessibilityLabel)
         .accessibilityIdentifier(action.identifier)
+    }
+}
+
+/// Figma "Button Group 1" (838:34313): a 44 pt orange circle with house.circle.fill in white; it goes back to today.
+/// Solid fill in the contrast-checked orange: translucent glass over the sky failed the contrast audit (Today button).
+struct HomeTodayButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            // A fixed size inside the fixed 44 pt circle; larger text sizes get the Large Content Viewer instead.
+            Image(systemName: "house.circle.fill")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(Color.tachoTextOnDark)
+                .frame(width: 44, height: 44)
+                .background(TachoTheme.orangeStrong, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        // Centred on the 48 pt Add button, which sits 8 pt below the top of the title row.
+        .padding(.top, 10)
+        .accessibilityLabel("Today")
+        .accessibilityShowsLargeContentViewer()
+        .accessibilityHint("Back to today")
+        .accessibilityIdentifier("todayButton")
     }
 }
 

@@ -206,6 +206,16 @@ public enum HomeTimeline {
         return formatter.string(from: now)
     }
 
+    /// "Fr, 16 Oct 2026" in the device locale (Figma "Fr 16 Oct 2026"): the No activities widget's last activity.
+    public static func lastActivityDate(_ date: Date, calendar: Calendar = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = calendar.locale ?? .current
+        formatter.setLocalizedDateFormatFromTemplate("EEEEEEdMMMyyyy")
+        return formatter.string(from: date)
+    }
+
     /// "Sat 17" in the device locale.
     public static func weekdayAndDay(_ date: Date, calendar: Calendar = .current) -> String {
         let formatter = DateFormatter()

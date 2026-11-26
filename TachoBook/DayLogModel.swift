@@ -102,6 +102,12 @@ public final class DayLogModel {
                 if let start = calendar.date(byAdding: .day, value: -3, to: midnight)?.addingTimeInterval(20 * 3600 + 600) {
                     model.seedArchivedShiftIfEmpty(start: start, end: midnight.addingTimeInterval(60))
                 }
+            } else if args.contains("-seedOldShift"), model.isEmpty {
+                // One shift six days ago 06:00–14:00, beyond the Home swipe: the No activities widget opens History.
+                let calendar = Calendar.current
+                if let day = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: Date())) {
+                    model.seedArchivedShiftIfEmpty(start: day.addingTimeInterval(6 * 3600), end: day.addingTimeInterval(14 * 3600))
+                }
             } else if args.contains("-seedNearDutyLimit"), model.isEmpty {
                 model.setDayStart(Date().addingTimeInterval(-(14 * 3600 + 45 * 60)))
             } else if let index = args.firstIndex(of: "-seedReducedRests"), index + 1 < args.count,

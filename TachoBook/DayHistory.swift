@@ -96,9 +96,26 @@ public enum TimeEntryIssue: Equatable {
     }
 }
 
-/// A rest that covers a whole past day that has no shift (F3).
-public struct RestCoverNote: Equatable {
-    public var restStart: Date
+/// A past day on Home without a shift record (Figma "Past Day Covered - 02", 838:33650): the No activities widget.
+public struct NoActivitiesDay {
+    /// The latest shift that started before the day; nil when there is none (the widget shows only its top part).
+    public var lastShift: DutyPeriod?
+
+    /// Where "Tap to see this day" leads.
+    public enum Target: Equatable {
+        /// The day is within the Home swipe: show it there.
+        case home(daysBack: Int)
+        /// Older: the History tab with the Day summary of that date.
+        case history(day: Date)
+    }
+
+    /// The day the last shift belongs to (its start date), on Home when the swipe reaches it, else in History.
+    public func target(now: Date, calendar: Calendar = .current) -> Target? {
+        guard let lastShift else { return nil }
+        let day = DayHistory.recordDay(lastShift, calendar: calendar)
+        if let daysBack = DayHistory.daysBack(of: day, from: now, calendar: calendar) { return .home(daysBack: daysBack) }
+        return .history(day: day)
+    }
 }
 
 /// Rest taken after a shift: next shift start minus this shift's end, or the time up to
@@ -268,18 +285,24 @@ extension DayLogModel {
         }
     }
 
-    // MARK: - Rest covering a whole past day (F3)
+    // MARK: - Past day without a shift (No activities widget)
 
-    /// A note for a past `day` that has no shift record while one rest covers the whole calendar day:
-    /// it started on an earlier day and ended on a later day, or is still running. nil otherwise.
-    public func restCoverNote(onDay day: Date, now: Date, calendar: Calendar = .current) -> RestCoverNote? {
+    /// The No activities widget for a past `day` that has no shift record; nil for today, the future and days
+    /// with a record.
+    public func noActivitiesDay(onDay day: Date, now: Date, calendar: Calendar = .current) -> NoActivitiesDay? {
         let target = calendar.startOfDay(for: day)
         guard target < calendar.startOfDay(for: now), dayRecord(on: target, calendar: calendar) == nil,
-              let nextMidnight = calendar.date(byAdding: .day, value: 1, to: target) else { return nil }
-        let before = allPeriods.map(\.period).filter { ($0.end.map { $0 < target } ?? false) }
-        guard let last = before.max(by: { $0.end! < $1.end! }),
-              let rest = restTaken(after: last, now: now) else { return nil }
-        guard let restEnd = rest.end else { return RestCoverNote(restStart: rest.start) }
-        return restEnd >= nextMidnight ? RestCoverNote(restStart: rest.start) : nil
+              // The open shift is not a past-day record, but a shift started that day is still an activity.
+              !(isShiftOpen && state.current.start.map { calendar.isDate($0, inSameDayAs: target) } == true)
+        else { return nil }
+        return NoActivitiesDay(lastShift: lastShift(before: target, calendar: calendar))
+    }
+
+    /// The latest record that started before `day`; a shift across midnight into `day` counts.
+    public func lastShift(before day: Date, calendar: Calendar = .current) -> DutyPeriod? {
+        let target = calendar.startOfDay(for: day)
+        var candidates = allPeriods.map(\.period).filter { $0.start != nil || $0.end != nil }
+        candidates.sortChronologically()
+        return candidates.last { DayHistory.recordDay($0, calendar: calendar) < target }
     }
 }

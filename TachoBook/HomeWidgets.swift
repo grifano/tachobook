@@ -226,8 +226,6 @@ struct HomeSecondaryCard<Item: View>: View {
     var symbol: String
     var title: String
     var count: Int
-    /// An optional line under the columns, separated by a hairline.
-    var footer: AnyView? = nil
     @ViewBuilder var item: (Int) -> Item
 
     var body: some View {
@@ -243,10 +241,6 @@ struct HomeSecondaryCard<Item: View>: View {
                 ? AnyLayout(VStackLayout(spacing: 16)) : AnyLayout(HStackLayout(alignment: .top, spacing: 20))
             layout { columns(rules: !dynamicTypeSize.isAccessibilitySize) }
             .frame(maxWidth: .infinity)
-            if let footer {
-                FadedRule().frame(height: 1)
-                footer
-            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

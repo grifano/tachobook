@@ -23,6 +23,8 @@ struct ContentView: View {
     /// One model for every tab, so History and Violations follow every change made on Home.
     @State private var model = DayLogModel.dashboardModel()
     @State private var selection = ContentView.initialTab
+    /// A date for History to open in its Day summary: Home's "Tap to see this day" past the 3-day swipe.
+    @State private var historyDay: Date?
 
     /// DEBUG only: `-startTab violations` opens the Violations tab, for screenshots and audits.
     private static var initialTab: MainTab {
@@ -42,11 +44,14 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $selection) {
             Tab("Home", systemImage: "house", value: MainTab.home) {
-                DashboardView(model: model)
+                DashboardView(model: model, onOpenHistoryDay: { day in
+                    historyDay = day
+                    selection = .history
+                })
             }
             Tab("History", systemImage: "calendar.badge.clock", value: MainTab.history) {
                 // A day with several violations opens the Violations list (decision 20).
-                HistoryView(model: model, onOpenViolations: { selection = .violations })
+                HistoryView(model: model, onOpenViolations: { selection = .violations }, openDay: $historyDay)
             }
             Tab("Violations", systemImage: "exclamationmark.circle.fill", value: MainTab.violations) {
                 ViolationsView(model: model)
